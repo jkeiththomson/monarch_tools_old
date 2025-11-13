@@ -1,0 +1,120 @@
+* Income
+Other Income
+Social Securty
+
+* Auto
+Auto Fees
+Auto Insurance
+Gas
+Maintenance & Repairs
+Mass Transit
+Parking & Tolls
+Rental Cars
+Taxi & Ride Shares
+
+* Business
+KB Pilates LLC
+LeakSentinel
+SJWS
+
+* Education
+Books
+Parking
+Tuition
+
+* Entertainment
+Apps
+Art
+Books
+Dance
+Movies
+Magazines
+Museums
+Music
+Newspapers
+Podcasts
+Sports
+Theater
+Video Games
+Videos
+
+* Financial
+Coin Storage
+Life Insurance
+Credit Card Fees
+Services
+Starting Balance
+Taxes
+
+* Food & Dining
+Groceries
+Restaurants & Bars
+Coffee Shops
+Beer & Wine
+
+* Health
+Dentist
+Doctor
+Fitness
+Health Insurance
+Labs
+Rx
+OTC
+Vision
+
+* Home Improvement
+Garage
+Landscaping
+
+* Holidays
+Christmas
+Halloween
+
+* Housing
+HOA
+Home Insurance
+Housekeeping
+Mortgage
+Storage
+
+* Other
+Charity
+Check
+Computer
+Gifts
+Miscellaneous
+Parties
+Postage & Shipping
+Uncategorized
+
+* Pets
+Accessories
+Food
+Pet Insurance
+Toys
+
+* Recreation
+Arts & Crafts
+Outdoor
+Sports
+
+* Shopping
+Clothing
+Electronics
+Furniture
+Housewares
+Personal
+
+* Utilities
+Gas & Electric
+Internet & Cable
+Landscaping
+Phone
+Trash & Recycling
+Water
+
+- Vacation
+Lodging
+Meals
+Sightseeing
+Travel

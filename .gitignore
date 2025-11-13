@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+.cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# PyCharm
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/dictionaries/
+.idea/httpRequests/
+.idea/inspectionProfiles/
+
+# Build & dist
+build/
+dist/
+
+# Outputs & analysis
+out/
+_analysis/
+
+

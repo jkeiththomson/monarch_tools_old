@@ -1,0 +1,10 @@
+{
+  "rules_version": 1,
+  "patterns": [],
+  "exact": {
+    "Amazon.com AMZN.COM/BILL WA": {
+      "category": "Other"
+    }
+  }
+}
+

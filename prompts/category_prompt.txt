@@ -1,0 +1,55 @@
+PROMPT START
+
+Add a command to monarch-tools called "categorize" that takes 3 positional arguments 
+and outputs multiple output fields
+
+Inputs:
+  1) categories.txt — path to a file that contains a list of all possible categories
+  2) rules.json -- merchant to category mapping rules (regex patterns supported)
+  3) one or more activity files, can be a folder or a .csv file 
+
+Outputs:
+  1) Updated categories.txt (sorted, de-duplicated)
+  2) Updated rules.json (with any new merchants discovered; regex keys respected)
+  3) One or more transaction files, one for each input z.csv file, formatted for Monarch Money import
+
+Default Monarch CSV columns written:
+  Date,Payee,Category,Notes,Amount
+
+Flexible input:
+  - You can pass a single file or a directory. Directories are scanned for "*_activity.csv".
+  - The input CSV can have various column names; the script will try to detect reasonable fields.
+    Preferred inputs include some subset of:
+      "Date", "Posted Date", "Transaction Date", "Description", "Merchant", "Payee", "Amount",
+      "Notes", "Memo", "Category"
+    Only Date/Amount and at least one of Description/Merchant/Payee are required.
+
+Rules format (rules.json)  
+{
+  "rules_version": 1,
+  "patterns": [
+    {"pattern": "SAFEWAY", "flags": "i", "normalized": "Safeway", "category": "Groceries"},
+    {"pattern": "AMAZON",  "flags": "i", "normalized": "Amazon",  "category": "Shopping"}
+  ],
+  "exact": {
+    "Taco Naco": {"category": "Dining"},
+    "Uber Trip": {"category": "Transport"}
+  }
+
+- "patterns" are regex-based and checked in order (first match wins).
+- "exact" are literal (case-insensitive) merchant/payee matches.
+- "normalized" in a pattern controls the Payee string written to Monarch. For "exact" we use the key itself.
+
+Behavior for new merchants:
+- If the input CSV already has a Category value, we will use it and:
+    • add the category to categories.txt if missing
+    • create/refresh an "exact" rule mapping the discovered merchant to that category
+- If the input has NO category, we:
+    • assign "Uncategorized"
+    • add a stub "exact" rule with null category so you can easily fill it later
+
+CLI:
+  python categorize categories.txt rules.json transactions.csv
+
+
+PROMPT END

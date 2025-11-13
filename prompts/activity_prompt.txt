@@ -1,0 +1,68 @@
+PROMPT START
+
+Add a new command, "activity," to the monarch-tools project/ 
+
+Inputs
+
+The command must accept two required positional arguments:
+account_type (== "chase" or "amex" or "citi")
+account_pdf - <stem>.statement.pdf
+
+It should then:
+	•	Use the stem of the PDF file (statement.pdf → statement) to infer the name of the output file: <stem>.activity.csv
+	•	Write the output file in the same directory as the PDF.
+
+Behavior and Logic
+
+1. Account Activity Extraction
+	•	Locate all tables titled ACCOUNT ACTIVITY or ACCOUNT ACTIVITY (CONTINUED).
+	•	Combine them into a single dataset.
+	•	Each transaction line begins with a date (MM/DD) and ends with an amount.
+	•	There are three columns in the output csv file:
+		* Date — infer full date in YYYY-MM-DD format, using the year from the closing date in the summary.
+			 If the transaction month > closing month → use previous year (handles cross-year statements).
+		* Description — all text between the date and the amount. Remove any leading ampersands.
+		* Amount — keep sign as shown in PDF.  Credits positive, debits negative.
+	•	Amount of .99 is 99 cents, not 99 dollars
+	•  	Normalize currency: keep $, ,, parentheses, and +/- symbols.
+	•	Output header:
+
+	Date,Description,Amount
+
+2. Footer Summary
+
+At the end of <stem>.activity.csv, append:
+	•	one blank row, then:
+
+Credit transactions (count),,<count of positive Amounts>
+Debit transactions (count),,<count of negative Amounts>
+Total credits,,<sum of positive Amounts>
+Total debits,,<sum of negative Amounts>
+
+(keeping other columns empty)
+
+Add the same four rows to the console log
+
+Output Example
+<stem>.activity.csv
+
+Implementation Details
+	•	Use pdfplumber to read text from the PDF.
+	•	Use re for regex parsing.
+	•	Normalize spaces (\s{2,} → single space).
+	•	Handle PDFs with variable spacing or capitalization (case-insensitive matching).
+	•	Make sure all CSV files are written as UTF-8 with headers.
+
+Command-line Example
+
+python toolbox.py chase  ~/dev/fu/statements/2018/20180112-statements-9391.pdf
+
+Produces:
+
+/Users/keith/dev/pep/20180112-statements-9391.activity.csv
+
+End goal: a fully standalone script that correctly extracts the account activities tables for any Chase Visa PDF in the same format, names output files automatically using the PDF’s stem, and formats numbers, signs, and dates exactly as in the sample.
+
+Save requirements in a file named requirements.txt
+
+PROMPT END

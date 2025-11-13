@@ -1,0 +1,11 @@
+PROMPT START
+
+I'm going to upload a zip file which contains a PyCharm project. The project comprises three commands: hello, name, activity. The project is called monarch-tools. It defines a module called monarch_tools. 
+
+I want you to remove the command activity completely, so there's no longer any trace of it in the project, including all of its arguments. 
+
+Then add a command called help, which lists the names and arguments of all the other functions in this project. 
+
+And when you're done with that, create a zip file of the whole project again, and let me know which files have changed.
+
+PROMPT END
