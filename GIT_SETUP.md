@@ -14,9 +14,9 @@ git commit -m "Initial commit"
 	git remote add origin git@github.com:jkeiththomson/monarch-tools.git
 	git branch -M main
 	git push -u origin main
-	
 
-```	
+
+```
 cd ~/dev
 zip -r monarch-tools-upload.zip monarch-tools \
   -x "monarch-tools/.git/*" \

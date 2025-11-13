@@ -1,12 +1,12 @@
 PROMPT START
 
-Add a command to monarch-tools called "categorize" that takes 3 positional arguments 
+Add a command to monarch-tools called "categorize" that takes 3 positional arguments
 and outputs multiple output fields
 
 Inputs:
   1) categories.txt — path to a file that contains a list of all possible categories
   2) rules.json -- merchant to category mapping rules (regex patterns supported)
-  3) one or more activity files, can be a folder or a .csv file 
+  3) one or more activity files, can be a folder or a .csv file
 
 Outputs:
   1) Updated categories.txt (sorted, de-duplicated)
@@ -24,7 +24,7 @@ Flexible input:
       "Notes", "Memo", "Category"
     Only Date/Amount and at least one of Description/Merchant/Payee are required.
 
-Rules format (rules.json)  
+Rules format (rules.json)
 {
   "rules_version": 1,
   "patterns": [

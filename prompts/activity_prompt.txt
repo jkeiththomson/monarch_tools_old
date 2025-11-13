@@ -1,6 +1,6 @@
 PROMPT START
 
-Add a new command, "activity," to the monarch-tools project/ 
+Add a new command, "activity," to the monarch-tools project/
 
 Inputs
 

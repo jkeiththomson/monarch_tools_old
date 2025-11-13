@@ -40,16 +40,16 @@ def build_parser():
     p_activity.add_argument(
         "account_type",
         choices=["chase", "citi", "amex"],
-        help="Which account type parser to use."
+        help="Which account type parser to use.",
     )
     p_activity.add_argument(
         "statement_pdf",
-        help="Statement PDF path (absolute) or a path/filename under ./statements."
+        help="Statement PDF path (absolute) or a path/filename under ./statements.",
     )
     p_activity.add_argument(
         "--debug",
         action="store_true",
-        help="Print diagnostic info (counts and a few sample lines)."
+        help="Print diagnostic info (counts and a few sample lines).",
     )
     p_activity.set_defaults(func=cmd_activity)
 
@@ -70,7 +70,9 @@ def cmd_help(ns: argparse.Namespace) -> int:
     print("Available commands:")
     print("  hello                        Say hello")
     print("  name <who>                   Print your name")
-    print("  activity <type> <pdf>        Extract account activity from a statement PDF")
+    print(
+        "  activity <type> <pdf>        Extract account activity from a statement PDF"
+    )
     print("  help                         Show this help message")
     print("\nUse 'monarch-tools <command> --help' for detailed options.")
     return 0
@@ -80,7 +82,11 @@ def cmd_help(ns: argparse.Namespace) -> int:
 # Activity extraction implementation
 # ------------------------------
 
-ACTIVITY_HEADERS = ("ACCOUNT ACTIVITY", "ACCOUNT ACTIVITY (CONTINUED)", "ACCOUNT  ACTIVITY")
+ACTIVITY_HEADERS = (
+    "ACCOUNT ACTIVITY",
+    "ACCOUNT ACTIVITY (CONTINUED)",
+    "ACCOUNT  ACTIVITY",
+)
 
 # Robust date/amount matcher:
 # - Allows .99 cents-only
@@ -212,11 +218,18 @@ def _find_closing_year(pdf: "pdfplumber.PDF") -> Tuple[int, int, int]:
                 return (y, int(mm), int(dd))
 
     from datetime import date
+
     today = date.today()
     return (today.year, today.month, today.day)
 
 
-def _infer_full_date(m: int, d: int, closing_year: int, closing_month: int, y_from_line: int | None = None) -> str:
+def _infer_full_date(
+    m: int,
+    d: int,
+    closing_year: int,
+    closing_month: int,
+    y_from_line: int | None = None,
+) -> str:
     """Return YYYY-MM-DD, preferring a year present on the line."""
     if y_from_line is not None:
         return f"{y_from_line:04d}-{m:02d}-{d:02d}"
@@ -241,7 +254,12 @@ def _extract_activity_lines(pdf: "pdfplumber.PDF") -> List[str]:
                 in_section = True
                 continue
             # heuristic end
-            if in_section and ln_clean.isupper() and len(ln_clean) > 6 and "ACCOUNT" not in ln_clean:
+            if (
+                in_section
+                and ln_clean.isupper()
+                and len(ln_clean) > 6
+                and "ACCOUNT" not in ln_clean
+            ):
                 in_section = False
             if in_section:
                 lines.append(ln)
@@ -253,14 +271,16 @@ def _extract_candidate_lines_anywhere(pdf: "pdfplumber.PDF") -> List[str]:
     keep: List[str] = []
     for page in pdf.pages:
         text = page.extract_text() or ""
-        for ln in (text.splitlines() if text else []):
+        for ln in text.splitlines() if text else []:
             s = ln.rstrip()
             if DATE_LINE_RE.match(s.strip()):
                 keep.append(s)
     return keep
 
 
-def _parse_transactions(lines: Iterable[str], closing_year: int, closing_month: int) -> List[Txn]:
+def _parse_transactions(
+    lines: Iterable[str], closing_year: int, closing_month: int
+) -> List[Txn]:
     txns: List[Txn] = []
     for raw in lines:
         s = _normalize_spaces(raw)
@@ -279,13 +299,23 @@ def _parse_transactions(lines: Iterable[str], closing_year: int, closing_month: 
         desc = _strip_leading_amp(m.group("desc").strip())
         amt_disp = m.group("amount").strip()
         # Normalize a few spaced formats for the display copy (we keep the original semantics)
-        amt_disp = amt_disp.replace(" $", " $").replace("$ ", "$").replace(" )", ")").replace("( ", "(").replace("  ", " ")
-        full_date = _infer_full_date(mm, dd, closing_year, closing_month, y_from_line=y_from_line)
+        amt_disp = (
+            amt_disp.replace(" $", " $")
+            .replace("$ ", "$")
+            .replace(" )", ")")
+            .replace("( ", "(")
+            .replace("  ", " ")
+        )
+        full_date = _infer_full_date(
+            mm, dd, closing_year, closing_month, y_from_line=y_from_line
+        )
         txns.append(Txn(full_date, desc, amt_disp))
     return txns
 
 
-def _write_activity_csv(out_path: Path, txns: List[Txn], pos_label: str, neg_label: str) -> Tuple[int, int, float, float]:
+def _write_activity_csv(
+    out_path: Path, txns: List[Txn], pos_label: str, neg_label: str
+) -> Tuple[int, int, float, float]:
     # pos = > 0  (payments/credits)
     # neg = < 0  (purchases/fees)
     pos_count = neg_count = 0
@@ -342,7 +372,9 @@ def _resolve_statements_pdf(arg_value: str) -> Path | None:
 def cmd_activity(ns: argparse.Namespace) -> int:
     pdf_path = _resolve_statements_pdf(ns.statement_pdf)
     if pdf_path is None:
-        print("Error: could not find the PDF under ./statements (checked relative path and filename search).")
+        print(
+            "Error: could not find the PDF under ./statements (checked relative path and filename search)."
+        )
         return 2
 
     out_path = pdf_path.with_suffix("")
@@ -362,19 +394,23 @@ def cmd_activity(ns: argparse.Namespace) -> int:
         if ns.debug:
             print(f"[debug] parsed transactions: {len(txns)}")
             for sample in txns[:5]:
-                print(f"[debug] sample -> {sample.yyyy_mm_dd} | {sample.description[:60]} | {sample.amount_display}")
+                print(
+                    f"[debug] sample -> {sample.yyyy_mm_dd} | {sample.description[:60]} | {sample.amount_display}"
+                )
 
     # Map signs to PDF labels (Option A)
     # > 0 -> Payments and credits
     # < 0 -> Purchases and fees
     if ns.account_type in ("chase", "citi", "amex"):
-        pos_label = "Payments and credits"   # > 0
-        neg_label = "Purchases and fees"     # < 0
+        pos_label = "Payments and credits"  # > 0
+        neg_label = "Purchases and fees"  # < 0
     else:
         pos_label = "Positive amounts"
         neg_label = "Negative amounts"
 
-    pos_count, neg_count, pos_sum, neg_sum = _write_activity_csv(out_path, txns, pos_label, neg_label)
+    pos_count, neg_count, pos_sum, neg_sum = _write_activity_csv(
+        out_path, txns, pos_label, neg_label
+    )
 
     print(f"Wrote: {out_path}")
     print(f"{pos_label} (count): {pos_count}")
