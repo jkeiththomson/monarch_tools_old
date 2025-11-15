@@ -312,12 +312,11 @@ def _parse_transactions(
         txns.append(Txn(full_date, desc, amt_disp))
     return txns
 
-
 def _write_activity_csv(
     out_path: Path, txns: List[Txn], pos_label: str, neg_label: str
 ) -> Tuple[int, int, float, float]:
-    # pos = > 0  (payments/credits)
-    # neg = < 0  (purchases/fees)
+    # pos bucket: > 0 values (as parsed)
+    # neg bucket: < 0 values (as parsed)
     pos_count = neg_count = 0
     pos_sum = neg_sum = 0.0
 
@@ -335,15 +334,23 @@ def _write_activity_csv(
                 neg_sum += val
             w.writerow([t.yyyy_mm_dd, t.description, t.amount_display])
 
-        # Footer summary using statement convention mapping (Option A)
         w.writerow([])
-        w.writerow([f"{pos_label} (count)", "", str(pos_count)])
-        w.writerow([f"{neg_label} (count)", "", str(neg_count)])
-        w.writerow([f"Total {pos_label}", "", f"{pos_sum:.2f}"])
-        w.writerow([f"Total {neg_label}", "", f"{neg_sum:.2f}"])
 
-    return pos_count, neg_count, pos_sum, neg_sum
+        # Reinterpret the buckets for the summary:
+        # - neg_* are PAYMENTS / CREDITS → positive total
+        # - pos_* are PURCHASES / FEES   → negative total
+        payments_count = neg_count
+        payments_total = abs(neg_sum)
 
+        purchases_count = pos_count
+        purchases_total = -abs(pos_sum)
+
+        w.writerow([f"{pos_label} (count)", "", str(payments_count)])
+        w.writerow([f"{neg_label} (count)", "", str(purchases_count)])
+        w.writerow([f"Total {pos_label}", "", f"{payments_total:.2f}"])
+        w.writerow([f"Total {neg_label}", "", f"{purchases_total:.2f}"])
+
+    return payments_count, purchases_count, payments_total, purchases_total
 
 def _resolve_statements_pdf(arg_value: str) -> Path | None:
     """
