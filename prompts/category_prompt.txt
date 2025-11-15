@@ -5,24 +5,23 @@ and outputs multiple output fields
 
 Inputs:
   1) categories.txt — path to a file that contains a list of all possible categories
-  2) rules.json -- merchant to category mapping rules (regex patterns supported)
-  3) one or more activity files, can be a folder or a .csv file
+  2) rules.json -- path to a file of merchant -> category mapping rules (regex patterns supported)
+  3) activity.csv -- path to an activity file (the output of the activity command)
 
 Outputs:
   1) Updated categories.txt (sorted, de-duplicated)
   2) Updated rules.json (with any new merchants discovered; regex keys respected)
-  3) One or more transaction files, one for each input z.csv file, formatted for Monarch Money import
+  3) One or more activity transaction files, one for each input activity.csv file, formatted for Monarch Money import
 
 Default Monarch CSV columns written:
   Date,Payee,Category,Notes,Amount
 
 Flexible input:
-  - You can pass a single file or a directory. Directories are scanned for "*_activity.csv".
   - The input CSV can have various column names; the script will try to detect reasonable fields.
-    Preferred inputs include some subset of:
+  - Preferred inputs include some subset of:
       "Date", "Posted Date", "Transaction Date", "Description", "Merchant", "Payee", "Amount",
       "Notes", "Memo", "Category"
-    Only Date/Amount and at least one of Description/Merchant/Payee are required.
+  - Only Date/Amount and at least one of Description/Merchant/Payee are required.
 
 Rules format (rules.json)
 {
@@ -47,9 +46,6 @@ Behavior for new merchants:
 - If the input has NO category, we:
     • assign "Uncategorized"
     • add a stub "exact" rule with null category so you can easily fill it later
-
-CLI:
-  python categorize categories.txt rules.json transactions.csv
 
 
 PROMPT END
