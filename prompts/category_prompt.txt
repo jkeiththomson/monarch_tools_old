@@ -11,7 +11,7 @@ Inputs:
 Outputs:
   1) Updated categories.txt (sorted, de-duplicated)
   2) Updated rules.json (with any new merchants discovered; regex keys respected)
-  3) One or more activity transaction files, one for each input activity.csv file, formatted for Monarch Money import
+  3) One or more monarch files, one for each input activity.csv file, formatted for Monarch Money import
 
 Default Monarch CSV columns written:
   Date,Payee,Category,Notes,Amount
@@ -46,6 +46,7 @@ Behavior for new merchants:
 - If the input has NO category, we:
     • assign "Uncategorized"
     • add a stub "exact" rule with null category so you can easily fill it later
+
 
 
 PROMPT END

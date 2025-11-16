@@ -1,9 +1,10 @@
 import argparse
 import csv
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pdfplumber
 
@@ -53,7 +54,37 @@ def build_parser():
     )
     p_activity.set_defaults(func=cmd_activity)
 
+    # --- categorize ---
+    p_cat = sub.add_parser(
+        "categorize",
+        help="Apply merchant/category rules to activity CSV and write <stem>.monarch.csv",
+        description=(
+            "Read categories.txt, rules.json, and an activity.csv file and emit a Monarch-"
+            "compatible CSV with Date,Payee,Category,Notes,Amount. The rules and categories"
+            " files are updated iteratively as new merchants and categories are discovered."
+        ),
+    )
+    p_cat.add_argument(
+        "categories",
+        help="Path to categories.txt (master list of categories)",
+    )
+    p_cat.add_argument(
+        "rules",
+        help="Path to rules.json (merchant → category rules)",
+    )
+    p_cat.add_argument(
+        "activity",
+        help="Path to an activity.csv file or a directory containing *.activity.csv files.",
+    )
+    p_cat.add_argument(
+        "--no-update-rules",
+        action="store_true",
+        help="Do not modify categories.txt or rules.json; just apply existing rules.",
+    )
+    p_cat.set_defaults(func=cmd_categorize)
+
     return parser
+
 
 
 def cmd_hello(ns: argparse.Namespace) -> int:
@@ -70,13 +101,11 @@ def cmd_help(ns: argparse.Namespace) -> int:
     print("Available commands:")
     print("  hello                        Say hello")
     print("  name <who>                   Print your name")
-    print(
-        "  activity <type> <pdf>        Extract account activity from a statement PDF"
-    )
+    print("  activity <type> <pdf>        Extract account activity from a statement PDF")
+    print("  categorize                   Categorize activity.csv into Monarch CSV")
     print("  help                         Show this help message")
     print("\nUse 'monarch-tools <command> --help' for detailed options.")
     return 0
-
 
 # ------------------------------
 # Activity extraction implementation
@@ -424,6 +453,372 @@ def cmd_activity(ns: argparse.Namespace) -> int:
     print(f"{neg_label} (count): {neg_count}")
     print(f"Total {pos_label}: {pos_sum:.2f}")
     print(f"Total {neg_label}: {neg_sum:.2f}")
+    return 0
+
+# ------------------------------
+# Categorize implementation
+# ------------------------------
+
+
+def _load_categories(path: Path) -> List[str]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8") as f:
+        cats = [line.strip() for line in f if line.strip()]
+    # de-duplicate while preserving order
+    seen: set[str] = set()
+    result: List[str] = []
+    for c in cats:
+        if c not in seen:
+            seen.add(c)
+            result.append(c)
+    return result
+
+
+def _save_categories(path: Path, categories: Sequence[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # sort for stable, readable file
+    unique_sorted = sorted({c for c in categories if c})
+    with path.open("w", encoding="utf-8", newline="") as f:
+        for c in unique_sorted:
+            f.write(c + "\n")
+
+
+def _load_rules(path: Path) -> Dict[str, object]:
+    if not path.exists():
+        return {"rules_version": 1, "patterns": [], "exact": {}}
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    data.setdefault("rules_version", 1)
+    data.setdefault("patterns", [])
+    data.setdefault("exact", {})
+    return data
+
+
+def _save_rules(path: Path, rules: Dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # sort exact keys for readability
+    exact = rules.get("exact") or {}
+    sorted_exact = {k: exact[k] for k in sorted(exact.keys(), key=str.lower)}
+    rules_to_write = {
+        "rules_version": int(rules.get("rules_version", 1)),
+        "patterns": list(rules.get("patterns") or []),
+        "exact": sorted_exact,
+    }
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(rules_to_write, f, indent=2, sort_keys=False)
+        f.write("\n")
+
+
+def _compile_pattern(entry: Dict[str, object]) -> re.Pattern:
+    flags_str = str(entry.get("flags", ""))
+    flags = 0
+    for ch in flags_str:
+        if ch.lower() == "i":
+            flags |= re.IGNORECASE
+        elif ch.lower() == "m":
+            flags |= re.MULTILINE
+        elif ch.lower() == "s":
+            flags |= re.DOTALL
+        elif ch.lower() == "x":
+            flags |= re.VERBOSE
+    pattern = entry.get("pattern", "")
+    return re.compile(pattern, flags)
+
+
+def _detect_columns(header: List[str]) -> Dict[str, int]:
+    """Detect key columns in a flexible activity CSV.
+
+    Returns mapping from logical name -> index:
+      - date
+      - amount
+      - payee   (merchant/payee/description)
+      - notes   (optional)
+      - category (optional)
+    """
+    normalized = [h.strip().lower() for h in header]
+
+    def find_any(candidates: Iterable[str]) -> int:
+        for i, name in enumerate(normalized):
+            for cand in candidates:
+                if name == cand:
+                    return i
+                # Loose match: ignore spaces and some punctuation
+                if name.replace(" ", "") == cand.replace(" ", ""):
+                    return i
+        return -1
+
+    date_idx = find_any(
+        ["date", "transaction date", "posted date", "post date", "statement date"]
+    )
+    amount_idx = find_any(
+        ["amount", "transaction amount", "charge amount", "payment amount"]
+    )
+    payee_idx = find_any(
+        ["merchant", "payee", "description", "transaction description"]
+    )
+    notes_idx = find_any(["notes", "note", "memo", "mem", "details"])
+    category_idx = find_any(["category", "categories"])
+
+    if date_idx < 0 or amount_idx < 0 or payee_idx < 0:
+        raise ValueError(
+            "Could not detect required columns. Need Date, Amount, and a Merchant/Payee/Description."
+        )
+
+    return {
+        "date": date_idx,
+        "amount": amount_idx,
+        "payee": payee_idx,
+        "notes": notes_idx,
+        "category": category_idx,
+    }
+
+
+def _iter_activity_files(path: Path) -> Iterable[Path]:
+    if path.is_dir():
+        for p in sorted(path.glob("*.activity.csv")):
+            if p.is_file():
+                yield p
+    else:
+        if path.suffix.lower() == ".csv":
+            yield path
+        else:
+            raise ValueError(f"activity path {path} is not a .csv file or directory")
+
+
+def _apply_rules_to_row(
+    payee_raw: str,
+    incoming_category: Optional[str],
+    rules: Dict[str, object],
+    categories: List[str],
+    allow_rule_updates: bool,
+) -> Tuple[str, str, List[str], List[str]]:
+    """Return (normalized_payee, final_category, new_categories, new_stub_merchants)."""
+    payee = (payee_raw or "").strip()
+    if not payee:
+        payee = "Unknown"
+
+    new_categories: List[str] = []
+    new_stub_merchants: List[str] = []
+
+    patterns = list(rules.get("patterns") or [])
+    exact_rules: Dict[str, Dict[str, object]] = dict(rules.get("exact") or {})
+
+    # Build case-insensitive lookup for exact rules
+    exact_lookup = {k.lower(): (k, v) for k, v in exact_rules.items()}
+
+    def ensure_category(cat: str) -> None:
+        if cat and cat not in categories:
+            categories.append(cat)
+            new_categories.append(cat)
+
+    # 1) If CSV already has a category, that wins and we update rules
+    if incoming_category:
+        cat = incoming_category.strip()
+        if cat:
+            ensure_category(cat)
+            if allow_rule_updates:
+                # refresh or create exact rule
+                key_lower = payee.lower()
+                if key_lower in exact_lookup:
+                    canonical, entry = exact_lookup[key_lower]
+                    entry["category"] = cat
+                    exact_rules[canonical] = entry
+                else:
+                    exact_rules[payee] = {"category": cat}
+            return payee, cat, new_categories, new_stub_merchants
+
+    # 2) Try regex patterns (first match wins)
+    for entry in patterns:
+        try:
+            pat = _compile_pattern(entry)
+        except re.error:
+            continue
+        if pat.search(payee):
+            cat = str(entry.get("category") or "").strip()
+            normalized = str(entry.get("normalized") or "") or payee
+            if cat:
+                ensure_category(cat)
+                return normalized, cat, new_categories, new_stub_merchants
+            return normalized, "Uncategorized", new_categories, new_stub_merchants
+
+    # 3) Try exact rules
+    key_lower = payee.lower()
+    if key_lower in exact_lookup:
+        canonical, entry = exact_lookup[key_lower]
+        cat = str(entry.get("category") or "").strip()
+        if cat:
+            ensure_category(cat)
+            return canonical, cat, new_categories, new_stub_merchants
+        # explicit stub: merchant known but not yet categorized
+        return canonical, "Uncategorized", new_categories, new_stub_merchants
+
+    # 4) New merchant: create stub exact rule with null category
+    if allow_rule_updates:
+        exact_rules[payee] = {"category": None}
+        new_stub_merchants.append(payee)
+
+    # Merge updated exact back into rules
+    rules["exact"] = exact_rules
+
+    ensure_category("Uncategorized")
+    return payee, "Uncategorized", new_categories, new_stub_merchants
+
+def cmd_categorize(ns: argparse.Namespace) -> int:
+    categories_path = Path(ns.categories)
+    rules_path = Path(ns.rules)
+    activity_path = Path(ns.activity)
+
+    categories = _load_categories(categories_path)
+    rules = _load_rules(rules_path)
+
+    allow_updates = not getattr(ns, "no_update_rules", False)
+
+    all_new_categories: List[str] = []
+    all_new_stub_merchants: set[str] = set()
+    # Track all rows that end up Uncategorized, for a review report
+    uncategorized_counts: Dict[str, int] = {}
+
+    try:
+        activity_files = list(_iter_activity_files(activity_path))
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 2
+    if not activity_files:
+        print(f"No .activity.csv files found under {activity_path}")
+        return 2
+
+    for act_file in activity_files:
+        with act_file.open("r", encoding="utf-8", newline="") as f_in:
+            reader = csv.reader(f_in)
+            try:
+                header = next(reader)
+            except StopIteration:
+                print(f"Warning: {act_file} is empty; skipping.")
+                continue
+
+            try:
+                cols = _detect_columns(header)
+            except ValueError as e:
+                print(f"Error in {act_file}: {e}")
+                return 2
+
+            out_rows: List[List[str]] = []
+            out_header = ["Date", "Payee", "Category", "Notes", "Amount"]
+            out_rows.append(out_header)
+
+            for row in reader:
+                if not any(row):
+                    continue
+                # protect against short rows
+                row_extended = row + [""] * max(0, max(cols.values()) + 1 - len(row))
+
+                date_val = row_extended[cols["date"]].strip()
+                amount_val = row_extended[cols["amount"]].strip()
+                payee_raw = row_extended[cols["payee"]].strip()
+
+                notes_val = ""
+                if cols["notes"] >= 0:
+                    notes_val = row_extended[cols["notes"]].strip()
+
+                incoming_category = ""
+                if cols["category"] >= 0:
+                    incoming_category = row_extended[cols["category"]].strip()
+
+                normalized_payee, final_category, new_cats, new_stubs = _apply_rules_to_row(
+                    payee_raw,
+                    incoming_category,
+                    rules,
+                    categories,
+                    allow_updates,
+                )
+                all_new_categories.extend(new_cats)
+                for m in new_stubs:
+                    all_new_stub_merchants.add(m)
+
+                if final_category == "Uncategorized":
+                    uncategorized_counts[normalized_payee] = uncategorized_counts.get(normalized_payee, 0) + 1
+
+                # Build Notes column
+                notes_parts: List[str] = []
+                if notes_val:
+                    notes_parts.append(notes_val)
+                if normalized_payee != payee_raw and payee_raw:
+                    notes_parts.append(f"Original: {payee_raw}")
+                notes_field = " | ".join(notes_parts)
+
+                out_row = [date_val, normalized_payee, final_category, notes_field, amount_val]
+                out_rows.append(out_row)
+
+        # Write Monarch CSV next to the activity file
+        monarch_path = act_file.with_suffix(".monarch.csv")
+        monarch_path.parent.mkdir(parents=True, exist_ok=True)
+        with monarch_path.open("w", encoding="utf-8", newline="") as f_out:
+            writer = csv.writer(f_out)
+            writer.writerows(out_rows)
+        print(f"Wrote {monarch_path}")
+
+        # Also keep per-activity snapshots of categories and rules
+        if allow_updates:
+            local_cat = act_file.with_suffix(".categories.txt")
+            local_rules = act_file.with_suffix(".rules.json")
+            _save_categories(local_cat, categories)
+            _save_rules(local_rules, rules)
+            print(f"Updated local {local_cat} and {local_rules}")
+
+    # After processing all files, update master categories/rules
+    if allow_updates:
+        _save_categories(categories_path, categories)
+        _save_rules(rules_path, rules)
+        print(f"Updated master {categories_path} and {rules_path}")
+
+    # Fold in any merchants from rules.json that still have no category at all
+    exact_rules: Dict[str, Dict[str, object]] = dict(rules.get("exact") or {})
+    for name, entry in exact_rules.items():
+        if entry.get("category") is None and name not in uncategorized_counts:
+            uncategorized_counts[name] = 0
+
+    # Summary
+    unique_new_categories = sorted(set(all_new_categories))
+    if unique_new_categories:
+        print("\nNew categories discovered:")
+        for c in unique_new_categories:
+            print(f"  {c}")
+
+    if all_new_stub_merchants:
+        print("\nNew merchants added as stubs (category=null in rules.json):")
+        for m in sorted(all_new_stub_merchants, key=str.lower):
+            print(f"  {m}")
+
+    # Build a review list of all merchants that are still effectively uncategorized
+    if uncategorized_counts:
+        print("\nMerchants still Uncategorized (review these in rules.json):")
+        # Sort by frequency (desc) then name
+        unresolved = sorted(
+            uncategorized_counts.items(),
+            key=lambda kv: (-kv[1], kv[0].lower()),
+        )
+        for name, count in unresolved:
+            print(f"  {name}  (count this run: {count})")
+
+        # Also write a CSV next to rules.json for spreadsheet review
+        review_path = rules_path.with_suffix(".review.csv")
+        review_rows: List[List[str]] = [["Merchant", "CurrentCategory", "CountInThisRun"]]
+        for name, count in unresolved:
+            entry = exact_rules.get(name)
+            current_cat = ""
+            if entry is not None:
+                current_cat = (entry.get("category") or "") or ""
+            elif count > 0:
+                current_cat = "Uncategorized"
+            review_rows.append([name, current_cat, str(count)])
+
+        review_path.parent.mkdir(parents=True, exist_ok=True)
+        with review_path.open("w", encoding="utf-8", newline="") as f_rev:
+            writer = csv.writer(f_rev)
+            writer.writerows(review_rows)
+        print(f"\nWrote review CSV: {review_path}")
+
     return 0
 
 
