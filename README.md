@@ -1,4 +1,4 @@
-# monarch_tools
+# monarch-tools
 
 CLI toolbox to help transform credit card statement PDFs into Monarch Money–ready CSVs.
 
@@ -31,14 +31,14 @@ pip install -e .
 If you had an older install:
 
 ```bash
-python -m pip uninstall -y monarch_tools
+python -m pip uninstall -y monarch-tools
 pip install -e .
 ```
 
-After that, you should have a `monarch_tools` CLI on your PATH inside the venv:
+After that, you should have a `monarch-tools` CLI on your PATH inside the venv:
 
 ```bash
-monarch_tools help
+monarch-tools help
 ```
 
 If PATH is being fussy, you can always run it module‑style:
@@ -73,7 +73,7 @@ The tool keeps:
 Sanity check that the CLI is installed and runnable.
 
 ```bash
-monarch_tools hello
+monarch-tools hello
 ```
 
 ### 3.2 `name`
@@ -81,7 +81,7 @@ monarch_tools hello
 Simple greeting with a name:
 
 ```bash
-monarch_tools name Keith
+monarch-tools name Keith
 ```
 
 ### 3.3 `help`
@@ -89,7 +89,7 @@ monarch_tools name Keith
 Lists available commands briefly:
 
 ```bash
-monarch_tools help
+monarch-tools help
 ```
 
 ---
@@ -97,7 +97,7 @@ monarch_tools help
 ### 3.4 `activity` — extract statement activity
 
 ```bash
-monarch_tools activity <account_type> <statement_pdf> [--debug]
+monarch-tools activity <account_type> <statement_pdf> [--debug]
 ```
 
 Arguments:
@@ -124,7 +124,7 @@ The command:
 Example:
 
 ```bash
-monarch_tools activity chase statements/chase/9391/2018/20180112-statements-9391.pdf
+monarch-tools activity chase statements/chase/9391/2018/20180112-statements-9391.pdf
 ```
 
 ---
@@ -132,7 +132,7 @@ monarch_tools activity chase statements/chase/9391/2018/20180112-statements-9391
 ### 3.5 `categorize` — apply merchant rules & generate Monarch CSVs
 
 ```bash
-monarch_tools categorize [--no-update-rules] <categories.txt> <rules.json> <activity_path>
+monarch-tools categorize [--no-update-rules] <categories.txt> <rules.json> <activity_path>
 ```
 
 Arguments:
@@ -295,7 +295,7 @@ For each `*.activity.csv` under `activity_path`:
 ### Step 1 — Extract an activity CSV
 
 ```bash
-monarch_tools activity chase statements/chase/9391/2018/20180112-statements-9391.pdf
+monarch-tools activity chase statements/chase/9391/2018/20180112-statements-9391.pdf
 ```
 
 This should produce:
@@ -314,7 +314,7 @@ Assuming:
 exist (they may start almost empty):
 
 ```bash
-monarch_tools categorize data/categories.txt data/rules.json     statements/chase/9391/2018/20180112-statements-9391.activity.csv
+monarch-tools categorize data/categories.txt data/rules.json     statements/chase/9391/2018/20180112-statements-9391.activity.csv
 ```
 
 Results:
@@ -344,7 +344,7 @@ Results:
 Run the same command again:
 
 ```bash
-monarch_tools categorize data/categories.txt data/rules.json     statements/chase/9391/2018/20180112-statements-9391.activity.csv
+monarch-tools categorize data/categories.txt data/rules.json     statements/chase/9391/2018/20180112-statements-9391.activity.csv
 ```
 
 You should see:
@@ -359,7 +359,7 @@ Repeat Steps 3–4 until `rules.review.csv` is empty or only contains merchants 
 ## 5. Notes
 
 - All parsing and categorization logic lives in `src/monarch_tools/console.py`.
-- The entry point is exposed via `pyproject.toml` under `[project.scripts]` as `monarch_tools`.
+- The entry point is exposed via `pyproject.toml` under `[project.scripts]` as `monarch-tools`.
 - For IDEs like PyCharm, you can run the module directly:
 
   ```bash
@@ -369,8 +369,8 @@ Repeat Steps 3–4 until `rules.review.csv` is empty or only contains merchants 
 - The `help` text for each command is always available:
 
   ```bash
-  monarch_tools activity --help
-  monarch_tools categorize --help
+  monarch-tools activity --help
+  monarch-tools categorize --help
   ```
 
 This README describes the “current workflow as programmed” — extract activity, categorize with iterative rules, and review uncategorized merchants using the generated CSV.
