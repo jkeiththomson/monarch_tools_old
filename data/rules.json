@@ -2,8 +2,296 @@
   "rules_version": 1,
   "patterns": [],
   "exact": {
+    "0546/2CA046 SEES CANDY 415-583-7307 CA": {
+      "category": null
+    },
+    "AMAZON MKTPLACE PMTS AMZN.COM/BILL WA": {
+      "category": null
+    },
     "Amazon.com AMZN.COM/BILL WA": {
       "category": "Other"
+    },
+    "APL* ITUNES.COM/BILL 866-712-7753 CA": {
+      "category": null
+    },
+    "ARAGON VETERINARY CLINIC- SAN MATEO CA": {
+      "category": null
+    },
+    "AT&T*BILL PAYMENT 800-331-0500 TX": {
+      "category": null
+    },
+    "Audible adbl.co/bill NJ": {
+      "category": null
+    },
+    "AVANTI PIZZA FRESH PASTA BELMONT CA": {
+      "category": null
+    },
+    "AVEDA EC#736 SAN MATEO CA": {
+      "category": null
+    },
+    "BAGEL ST. CAFE MENLO PARK CA": {
+      "category": null
+    },
+    "BAY AREA SELF STORAGE 000-0000000 CA": {
+      "category": null
+    },
+    "BED BATH & BEYOND #539 REDWOOD CITY CA": {
+      "category": null
+    },
+    "BLS*MULTIFIT 18663127733": {
+      "category": null
+    },
+    "BLUE SHIELD OF CA 800-431-2809 CA": {
+      "category": null
+    },
+    "CA PARK FEES SANTA CRUZ CA": {
+      "category": null
+    },
+    "CENTURY THEATRES 399 MOUNTAIN VIEW CA": {
+      "category": null
+    },
+    "CHARDONNAY SAILING STRIPE.COM CA": {
+      "category": null
+    },
+    "CHEVRON 0092712 BELMONT CA": {
+      "category": null
+    },
+    "COASTSIDE BOOKS HALF MOON BAY CA": {
+      "category": null
+    },
+    "COMCAST CALIFORNIA 800-COMCAST CA": {
+      "category": null
+    },
+    "COSTCO ONLINE RX 800-955-2292 WA": {
+      "category": null
+    },
+    "CVS/PHARMACY #09833 SAN MATEO CA": {
+      "category": null
+    },
+    "DRI*CRASHPLAN PRO 952-908-4089 MN": {
+      "category": null
+    },
+    "EB GAMES #4570 SAN MATEO CA": {
+      "category": null
+    },
+    "EP MANAGEMENT SERVICES SAN FRANCISCO CA": {
+      "category": null
+    },
+    "FANDANGO.COM FANDANGO.COM CA": {
+      "category": null
+    },
+    "FASTRAK CSC 415-486-8655 CA": {
+      "category": null
+    },
+    "GATOR GAMES & HOBBY SAN MATEO CA": {
+      "category": null
+    },
+    "GIN MON 168 INC BELMONT CA": {
+      "category": null
+    },
+    "GO! CALENDARS,GAMES,BOOKS SAN MATEO CA": {
+      "category": null
+    },
+    "GOLDEN STATE SMOG CENTER BELMONT CA": {
+      "category": null
+    },
+    "GOOGLE *Google Storage 855-836-3987 CA": {
+      "category": null
+    },
+    "HAWTHORN SUITES STERLING VA": {
+      "category": null
+    },
+    "HEALTHY PAWS PET INSURAN TRACIM@HEALTH WA": {
+      "category": null
+    },
+    "HLU*Hulu 14488933-U HULU.COM/BILL CA": {
+      "category": null
+    },
+    "HOVER 866-731-6556 MS": {
+      "category": null
+    },
+    "HSN*HSN1480360885 800-9332887 FL": {
+      "category": null
+    },
+    "HUDSON ST1404 STERLING VA": {
+      "category": null
+    },
+    "JCPENNEY.COM JCPENNEY.COM NV": {
+      "category": null
+    },
+    "JCPENNEY.COM JCPENNEY.COM OH": {
+      "category": null
+    },
+    "JOHN MADEJ, MD WWW.PORTOLAMD CA": {
+      "category": null
+    },
+    "Kindle Unlimited 888-802-3080 WA": {
+      "category": null
+    },
+    "LADERA GARDEN AND GIFTS A BELMONT CA": {
+      "category": null
+    },
+    "LAZ PKG 180104 - TELEGRA BERKELEY CA": {
+      "category": null
+    },
+    "LUNARDI'S MKT #5 BELMONT CA": {
+      "category": null
+    },
+    "MACYS HILLSDALE SAN MATEO CA": {
+      "category": null
+    },
+    "MCDONALDS F6641 SAN CARLOS CA": {
+      "category": null
+    },
+    "MICHAEL'S HAIR DESIGN BELMONT CA": {
+      "category": null
+    },
+    "Mid-Peninsula Water Distr 650-591-8941 CA": {
+      "category": null
+    },
+    "MUNCHERY, INC. 888-458-5376 CA": {
+      "category": null
+    },
+    "MUNCHRYMEMBERSHIP MUNCHERY.COM CA": {
+      "category": null
+    },
+    "NEST LABS 855-469-6378 CA": {
+      "category": null
+    },
+    "Netflix.com netflix.com CA": {
+      "category": null
+    },
+    "NY TIMES NATL SALES 800-698-4637 NY": {
+      "category": null
+    },
+    "OFFICE DEPOT #558 SAN CARLOS CA": {
+      "category": null
+    },
+    "ORCHARD SUPPLY #500 SAN CARLOS CA": {
+      "category": null
+    },
+    "Payment Thank You - Bill Pay Service": {
+      "category": null
+    },
+    "PAYPAL *STEAM GAMES 425-952-2985 WA": {
+      "category": null
+    },
+    "PETSMART # 1416 SAN MATEO CA": {
+      "category": null
+    },
+    "PF CHANGS #6900 SUNNYVALE CA": {
+      "category": null
+    },
+    "PIZZA HUT #028209 OXFORD PA": {
+      "category": null
+    },
+    "PLAYSTATION NETWORK 800-345-7669 CA": {
+      "category": null
+    },
+    "PlaystationNetwork 800-3457669 CA": {
+      "category": null
+    },
+    "PURCHASE INTEREST CHARGE": {
+      "category": null
+    },
+    "SAFEWAY #1138 BELMONT CA": {
+      "category": null
+    },
+    "SAFEWAY #668 BELMONT CA": {
+      "category": null
+    },
+    "SAN JOSE WIND SYMPH 408-927-7597 CA": {
+      "category": null
+    },
+    "SEARS ROEBUCK 1478 SAN BRUNO CA": {
+      "category": null
+    },
+    "SERVICE CHAMPIONS 925-5981911 CA": {
+      "category": null
+    },
+    "SHARI'S BERRIES 877-237-7437 CA": {
+      "category": null
+    },
+    "SMCCCD COM ED 650-3586743 CA": {
+      "category": null
+    },
+    "Spotify USA 646-8375380 NY": {
+      "category": null
+    },
+    "SQ *JOHN MADEJ, MD Portola Valle CA": {
+      "category": null
+    },
+    "SQUARESPACE INC. HTTPSSQUARESP NY": {
+      "category": null
+    },
+    "STUBHUB 866-788-2482 CA": {
+      "category": null
+    },
+    "SUSHI MONSTER BELMONT CA": {
+      "category": null
+    },
+    "TACO BELL 30796 SAN CARLOS CA": {
+      "category": null
+    },
+    "TASTE OF VIETNAM STERLING VA": {
+      "category": null
+    },
+    "TCKTWEB*ARSENIOHALL 800-965-4827 CA": {
+      "category": null
+    },
+    "TRAVELERS PERS INS 888-616-8715 CT": {
+      "category": null
+    },
+    "UNITED 0162379983555 800-932-2732 TX": {
+      "category": null
+    },
+    "UNITED 0162379983556 800-932-2732 TX": {
+      "category": null
+    },
+    "UNITED 0162379983557 800-932-2732 TX": {
+      "category": null
+    },
+    "UNITED 0162928502098 800-932-2732 TX": {
+      "category": null
+    },
+    "UNITED 0162928502099 800-932-2732 TX": {
+      "category": null
+    },
+    "UNITED 0162928502100 800-932-2732 TX": {
+      "category": null
+    },
+    "Unknown": {
+      "category": null
+    },
+    "USPS PO 0506000101 BELMONT CA": {
+      "category": null
+    },
+    "VISION SERVICE PLAN CA 800-4004569 CA": {
+      "category": null
+    },
+    "WAL-MART #5795 OXFORD PA": {
+      "category": null
+    },
+    "WALGREENS #0063 BELMONT CA": {
+      "category": null
+    },
+    "WALGREENS #11074 OXFORD PA": {
+      "category": null
+    },
+    "WALGREENS #2126 SAN CARLOS CA": {
+      "category": null
+    },
+    "WETZEL'S PRETZEL SAN BRUNO CA": {
+      "category": null
+    },
+    "WHOLEFDS RED 10154 REDWOOD CITY CA": {
+      "category": null
+    },
+    "WINE AND SPIRITS 1524 OXFORD PA": {
+      "category": null
+    },
+    "ZELLERBACH HALL BERKELEY CA": {
+      "category": null
     }
   }
 }

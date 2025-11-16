@@ -12,7 +12,7 @@ requires-python = ">=3.9"
 dependencies = []
 
 [project.scripts]
-monarch-tools = "monarch_tools.console:main"
+monarch_tools = "monarch_tools.console:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

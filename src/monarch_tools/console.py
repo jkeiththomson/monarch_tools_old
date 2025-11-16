@@ -11,7 +11,7 @@ import pdfplumber
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog="monarch-tools",
+        prog="monarch_tools",
         description="Monarch Money toolbox CLI",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -88,7 +88,7 @@ def build_parser():
 
 
 def cmd_hello(ns: argparse.Namespace) -> int:
-    print("Hello from monarch-tools!")
+    print("Hello from monarch_tools!")
     return 0
 
 
@@ -104,7 +104,7 @@ def cmd_help(ns: argparse.Namespace) -> int:
     print("  activity <type> <pdf>        Extract account activity from a statement PDF")
     print("  categorize                   Categorize activity.csv into Monarch CSV")
     print("  help                         Show this help message")
-    print("\nUse 'monarch-tools <command> --help' for detailed options.")
+    print("\nUse 'monarch_tools <command> --help' for detailed options.")
     return 0
 
 # ------------------------------
@@ -391,7 +391,7 @@ def _resolve_statements_pdf(arg_value: str) -> Path | None:
     if p.is_absolute() and p.suffix.lower() == ".pdf" and p.is_file():
         return p
 
-    project_root = Path(__file__).resolve().parents[2]  # .../monarch-tools
+    project_root = Path(__file__).resolve().parents[2]  # .../monarch_tools
     statements_dir = project_root / "statements"
     candidate = statements_dir / arg_value
 
