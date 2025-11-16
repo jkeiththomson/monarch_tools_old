@@ -15,7 +15,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="monarch_tools" />
-    <option name="PARAMETERS" value="categorize categories rules monarch" />
+    <option name="PARAMETERS" value="categorize data/categories.txt data/rules.json statements/chase/9391/2018/20180112-statements-9391.activity.csv" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="true" />
