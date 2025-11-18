@@ -1,0 +1,21 @@
+START PROMPT
+
+Use the attached file as a starting point.
+
+The first thing I want to do is remove the two commands called "categorize" and "assign". We're going to re-do those commands, so get rid of all vestiges of those commands and the way they're invoked from console.py. Then stop and give me a zip file of the whole project that I can test.
+
+The second thing I want to do is change the architecture of the console commands so that we have separate .py files for each command implemenation. You can keep console.py and use it for invoking the various commands in monarch_tools, but the "business logic" of each command should be in a separate .py file: hello.py, name.py, help.py, activity.py. and so on.
+Then stop and give me a zip file of the whole project that I can test.
+
+The third thing I want to do it add a command calle "categorize".  Categorize is going to take four inputs
+- data/categories.txt: the current list of category names
+- data/groups.txt: the current list of group names (and which category is in which group)
+- data/rules.json: the current list of rules for mapping merchants to canonical merchant names and for mapping canonical merchant names to categories
+- the <stem>.activity.csv file produced by the "activity" command
+
+The "categorize" command outputs several files:
+- the revised categories.txt, groups.txt, rules.json
+
+The command will march through each line of activity.csv, interacting with the user to set the canonical merchant name and category, if they haven't already been set. The user should be able to create a revised merchant name and a new category and group, or use a preexisting one. 
+
+END PROMPT
