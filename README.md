@@ -8,7 +8,7 @@ It currently includes these commands:
 - `name <your_name>` — greets the provided name
 - `help` — prints a short command summary
 - `activity <type> <pdf>` — parses a statement PDF into an `*.activity.csv`
-- `categorize <categories.txt> <rules.json> <activity>` — converts `*.activity.csv` into Monarch‑format CSVs and maintains your merchant/category rules
+- `categorize <categories.txt> <groups.txt> <rules.json> <activity.csv>` — interactively maintains categories, groups, and merchant rules
 
 ---
 
@@ -129,165 +129,52 @@ monarch-tools activity chase statements/chase/9391/2018/20180112-statements-9391
 
 ---
 
-### 3.5 `categorize` — apply merchant rules & generate Monarch CSVs
+### 3.5 `categorize` — interactively build categories, groups, and rules
 
 ```bash
-monarch-tools categorize [--no-update-rules] <categories.txt> <rules.json> <activity_path>
+monarch-tools categorize <categories.txt> <groups.txt> <rules.json> <activity_csv>
 ```
 
 Arguments:
 
 - `categories.txt` — master list of categories (one per line).  
   Recommended location: `data/categories.txt`.
+- `groups.txt` — mapping of *groups* to categories (for nicer dashboards), in the format:
+
+  ```text
+  # Lines starting with # are comments
+  [Essentials]
+  Groceries
+  Dining
+
+  [Housing]
+  Utilities
+  Insurance
+
+  [Other]
+  Uncategorized
+  ```
+
 - `rules.json` — master merchant→category rules file.  
   Recommended location: `data/rules.json`.
-- `activity_path` — either:
-  - a single `*.activity.csv` file, or
-  - a directory containing one or more `*.activity.csv` files.
+- `activity_csv` — a single `<stem>.activity.csv` file produced by the `activity` command.
 
-Options:
+What `categorize` does:
 
-- `--no-update-rules`  
-  Run in a “read‑only” mode: apply existing rules and categories, but do **not** modify `categories.txt` or `rules.json`, and do not write per‑activity snapshots.
+1. Loads the existing `categories.txt`, `groups.txt`, and `rules.json` files (creating default structures in memory if they are missing).
+2. Walks each row in the given `activity_csv`, focusing on the **Description** column.
+3. For each raw merchant description:
+   - Ensures there is a **canonical merchant name** in `raw_to_canonical`.
+   - Ensures that canonical merchant has a **category** in `exact`.
+   - Ensures that category appears in `categories.txt`.
+   - Ensures that category belongs to a group in `groups.txt` (prompting you to pick or create a group if needed).
+4. Writes updated versions of:
+   - `categories.txt`
+   - `groups.txt`
+   - `rules.json`
 
----
-
-#### 3.5.1 Expected data files
-
-**`categories.txt`**
-
-Plain text file, one category per line, for example:
-
-```text
-Groceries
-Dining
-Shopping
-Travel
-Uncategorized
-```
-
-`categorize` will:
-
-- Add any *new* categories it discovers (from incoming CSV category fields or rules) to this file.
-- Keep the list deduplicated and sorted on write.
-
-**`rules.json`**
-
-JSON document with two main sections:
-
-```json
-{
-  "rules_version": 1,
-  "patterns": [
-    {
-      "pattern": "SAFEWAY",
-      "flags": "i",
-      "normalized": "Safeway",
-      "category": "Groceries"
-    }
-  ],
-  "exact": {
-    "Taco Naco": { "category": "Dining" },
-    "AMAZON MKTPLACE PMTS AMZN.COM/BILL WA": { "category": null }
-  }
-}
-```
-
-- `"patterns"` — regex‑based rules (first match wins).  
-  `flags` uses Python regex flags letters (`i`, `m`, `s`, `x`).
-- `"exact"` — literal, case‑insensitive merchant matches:
-  - `{"category": "Groceries"}` → fully defined rule.
-  - `{"category": null}` → **stub** rule: known merchant, category not chosen yet.
-
-You do **not** have to maintain the sort order; the tool will keep `"exact"` keys sorted when writing.
-
----
-
-#### 3.5.2 What `categorize` does per run
-
-For each `*.activity.csv` under `activity_path`:
-
-1. **Detect columns** flexibly:
-   - Required:
-     - Date (e.g. `Date`, `Transaction Date`, `Posted Date`, …)
-     - Amount (`Amount`, `Transaction Amount`, …)
-     - Merchant/Payee (`Merchant`, `Payee`, `Description`, …)
-   - Optional:
-     - Notes (`Notes`, `Note`, `Memo`, …)
-     - Category (`Category`, `Categories`)
-
-2. **For each row**:
-   - If the CSV already has a **Category** value:
-     - That category wins.
-     - It is added to `categories.txt` if new.
-     - An exact rule is created/updated in `rules.json` for this merchant.
-   - Else, try **pattern rules** (`patterns` list).
-   - Else, try **exact rules** (`exact` dict).
-   - If still no category:
-     - Assign `"Uncategorized"`.
-     - Ensure `"Uncategorized"` exists in `categories.txt`.
-     - Add a stub exact rule with `"category": null` for that merchant.
-
-3. **Write Monarch‑style CSV**
-
-   For each input `foo.activity.csv`, it writes:
-
-   ```text
-   foo.activity.monarch.csv
-   ```
-
-   with columns:
-
-   ```text
-   Date,Payee,Category,Notes,Amount
-   ```
-
-   - `Payee` is the normalized merchant (from pattern/ exact rules when applicable).
-   - `Notes` combines any Notes/Memo field plus `Original: <raw merchant>` if it differs from the normalized payee.
-   - `Amount` is copied from the activity CSV (no sign flip here; the extractor is responsible for that).
-
-4. **Update rules & categories**
-
-   Unless `--no-update-rules` is used:
-
-   - Master `categories.txt` is updated (deduped, sorted).
-   - Master `rules.json` is updated (new categories, stub rules, sorted `"exact"` keys).
-   - Per‑file snapshots are written next to each `.activity.csv`:
-
-     ```text
-     foo.activity.categories.txt
-     foo.activity.rules.json
-     ```
-
-5. **Generate a review CSV**
-
-   After processing all files, `categorize` builds a **review list** of merchants that are effectively uncategorized and writes:
-
-   ```text
-   data/rules.review.csv
-   ```
-
-   (same folder as your master `rules.json`).
-
-   This CSV contains:
-
-   ```text
-   Merchant,CurrentCategory,CountInThisRun
-   AMAZON MKTPLACE PMTS AMZN.COM/BILL WA,,7
-   SAFEWAY #1138 BELMONT CA,,8
-   ...
-   ```
-
-   - `Merchant` — canonical merchant name (normalized payee).
-   - `CurrentCategory` — whatever is currently stored in `rules.json` (blank if `null`).
-   - `CountInThisRun` — how many times this merchant ended up as `Uncategorized` in this categorize run.
-
-   The console summary also prints:
-
-   - New categories discovered
-   - New stub merchants added
-   - A short list of merchants still `Uncategorized`.
-
+This version of `categorize` is intentionally simple: it **does not** write a Monarch‑format CSV yet.  
+Instead, it focuses on helping you interactively curate a clean set of merchants, categories, and groups that other tooling can reuse.
 ---
 
 ## 4. Recommended iterative workflow
@@ -358,93 +245,38 @@ Repeat Steps 3–4 until `rules.review.csv` is empty or only contains merchants 
 
 ## 5. Notes
 
-- All parsing and categorization logic lives in `src/monarch_tools/console.py`.
-- The entry point is exposed via `pyproject.toml` under `[project.scripts]` as `monarch-tools`.
-- For IDEs like PyCharm, you can run the module directly:
+- The command‑line *wiring* lives in `src/monarch_tools/console.py`.
+- The actual business logic is split by command in:
+  - `src/monarch_tools/activity.py`
+  - `src/monarch_tools/categorize.py`
+  - `src/monarch_tools/hello.py`
+  - `src/monarch_tools/name.py`
+  - `src/monarch_tools/help.py`
+- The CLI entry point is exposed via `pyproject.toml` under `[project.scripts]` as `monarch-tools`.
+
+  That means you can run any command either as:
 
   ```bash
-  python -m monarch_tools.console categorize data/categories.txt data/rules.json path/to/activity
+  monarch-tools activity chase statements/chase/9391/2018/20180112-statements-9391.pdf
   ```
 
-- The `help` text for each command is always available:
+  or, equivalently:
+
+  ```bash
+  python -m monarch_tools activity chase statements/chase/9391/2018/20180112-statements-9391.pdf
+  ```
+
+- The `--help` text for each command is always available:
 
   ```bash
   monarch-tools activity --help
   monarch-tools categorize --help
+  monarch-tools hello --help
+  monarch-tools name --help
+  monarch-tools help
   ```
 
-This README describes the “current workflow as programmed” — extract activity, categorize with iterative rules, and review uncategorized merchants using the generated CSV.
-
-## 6. Merchant name cleanup in `categorize`
-
-When you run:
-
-```bash
-monarch-tools categorize data/categories.txt data/rules.json path/to/activity
-```
-
-the tool now includes an **interactive merchant cleanup step**:
-
-- For each *distinct* merchant name it encounters, it shows:
-  - The original name as it appears in the statement.
-  - Up to 9 cleaned‑up suggestions (e.g., without phone numbers, long ticket IDs, or store codes).
-- Press **1–9** to pick a suggestion, or just press **Enter** to keep the current value.
-- The chosen value becomes the **Payee** written to the `*.activity.monarch.csv` file.
-- The original raw text from the statement is preserved in the **Notes** column when it differs.
-
-This cleanup happens once per distinct merchant name per `categorize` run and is purely about
-making the Payee text nicer for import into Monarch. Categories and rules continue to work
-as described above.
-
-> If you re‑run `categorize` on the same activity file and make different cleanup choices,
-> the tool rewrites the `*.activity.monarch.csv`, so all rows for that merchant get the
-> updated Payee.
-
-### Category / group validation
-
-Whenever `categories.txt` is updated (by `categorize` or other commands), the tool now checks
-it against `groups.txt` in the same directory:
-
-- Every category in `categories.txt` must appear **exactly once** in `groups.txt`.
-- If a category is missing or appears in more than one group, a file named:
-
-```text
-data/groups_exceptions.txt
-```
-
-is written listing the problematic categories so you can correct `groups.txt`.
-
-If there are no problems, any existing `groups_exceptions.txt` file is removed.
-
+- `groups.txt` is treated as a required mapping from groups to categories. Whenever `categorize`
+  adds a new category, it will prompt you to assign that category to a group and will write a
+  consistent `groups.txt` file back to disk.
 ---
-
-## 7. Interactive `assign` command (category picker)
-
-In addition to `categorize`, there is now an `assign` command that lets you walk through
-merchants with no category in `rules.json` and assign categories interactively:
-
-```bash
-monarch-tools assign data/categories.txt data/rules.json
-```
-
-This command:
-
-1. Loads `categories.txt` and `rules.json`.
-2. Finds every merchant in `rules["exact"]` whose `category` is empty or `null`.
-3. For each merchant:
-   - Shows the merchant name.
-   - Opens an interactive category picker:
-
-     - Type letters to **filter** categories by substring.
-     - Use **↑/↓** to move through the filtered list.
-     - Press **Enter** to select a category.
-     - Press **q** or **Esc** to skip that merchant.
-
-4. When you pick a category:
-   - The category is assigned to that merchant in `rules.json`.
-   - If the category doesn’t yet exist in `categories.txt`, it is added.
-5. At the end, both `categories.txt` and `rules.json` are written back, and
-   `groups_exceptions.txt` is updated (or removed) as needed.
-
-You can run `assign` as many times as you like; it will only prompt for merchants that
-still lack a category.
