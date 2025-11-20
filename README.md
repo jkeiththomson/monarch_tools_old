@@ -131,6 +131,76 @@ monarch-tools activity chase statements/chase/9391/2018/20180112-statements-9391
 
 ### 3.5 `categorize` — interactively build categories, groups, and rules
 
+### 3.6 `monarch`
+When an account is first seen by the `monarch` command, you are prompted for
+its **opening balance**. That value is stored in `data/config.toml` and, if
+present, the Monarch CSV will include a synthetic transaction row:
+
+- `Merchant`: `Opening Balance`
+- `Original Statement`: `Opening balance imported from config.toml`
+- `Notes`: `Synthetic opening balance transaction (not in original statement)`
+- `Amount`: negative if you owed money, positive if you had a credit
+
+This row is **ignored by the `sanity` command** when it compares totals, so the
+sanity check still reflects only the statement-derived transactions.
+
+
+### 3.7 `sanity`
+
+Run a quick consistency check between an `<stem>.activity.csv` file and the
+corresponding `<stem>.monarch.csv` export.
+
+**Usage:**
+
+```bash
+monarch-tools sanity out/20180112-statements-9391.activity.csv
+# or, with an explicit Monarch CSV path:
+monarch-tools sanity out/20180112-statements-9391.activity.csv out/20180112-statements-9391.monarch.csv
+```
+
+This command prints:
+
+- Payments/credits: counts and totals from the activity file vs the Monarch file
+- Purchases/fees: counts and totals from the activity file vs the Monarch file
+- The differences (Monarch - Activity) for both counts and totals
+
+If the totals differ by more than a few cents, it prints a warning and returns
+a non-zero exit code. Otherwise, it prints:
+
+> Sanity check: OK (differences are within a few cents).
+
+
+Export a CSV that can be imported directly into **Monarch Money** using their
+*single-account* CSV importer.
+
+**Usage:**
+
+```bash
+monarch-tools monarch <account_name> data/rules.json statements/chase/2018/20180112-statements-9391.activity.csv
+# or
+python -m monarch_tools monarch <account_name> data/rules.json statements/chase/2018/20180112-statements-9391.activity.csv
+```
+
+This reads:
+
+- `rules.json` for canonical merchant names and categories
+- the `<stem>.activity.csv` file produced by the `activity` command
+
+and writes `<stem>.monarch.csv` next to the activity file, with columns in the
+order required by Monarch's single-account importer:
+
+1. `Date`
+2. `Merchant`  (canonical merchant from `rules.json`)
+3. `Category`  (from `rules.json`)
+4. `Account`   (the `<account_name>` you pass on the command line)
+5. `Original Statement` (raw description from the activity CSV)
+6. `Notes`     (currently left blank)
+7. `Amount`    (negative for purchases/fees, positive for payments/credits)
+8. `Tags`      (currently left blank)
+
+You can optionally override the output path with `--out PATH`.
+ — apply merchant rules & generate Monarch CSVs
+
 ```bash
 monarch-tools categorize <categories.txt> <groups.txt> <rules.json> <activity_csv>
 ```
@@ -176,6 +246,49 @@ What `categorize` does:
 This version of `categorize` is intentionally simple: it **does not** write a Monarch‑format CSV yet.  
 Instead, it focuses on helping you interactively curate a clean set of merchants, categories, and groups that other tooling can reuse.
 ---
+
+
+#### 3.5.x Options
+
+- `--dry-run`  
+  Run the categorization flow without writing any changes to `categories.txt`,
+  `groups.txt`, or `rules.json`. You still go through the full interactive
+  canonical / category / group flow, but at the end the tool prints which files
+  it *would* have written and exits without touching the filesystem.
+#### 3.5.x Interactive controls
+
+When `categorize` asks you for input, you can control it with the keyboard:
+
+- **Canonical merchant prompt**
+  - Hit **Enter** to accept the default (either the existing canonical name or the raw description).
+  - Type a new name to change the canonical merchant.
+  - Type `:q` to stop categorizing and choose whether to save progress.
+
+- **Category selection**
+  - Start typing part of a category name. The tool shows only categories whose names
+    **contain** that substring (case-insensitive).
+  - Refine by typing a more specific filter; the list shrinks as you go.
+  - When the text you have typed is exactly the category you want to use
+    (existing or new), press **Enter** on an empty line to accept it.
+  - If the category does not exist yet, it is created and added to `categories.txt`.
+  - Type `:q` at any prompt to stop categorizing and choose whether to save.
+
+- **Group selection**
+  - After picking a category that does not yet belong to a group, you will be asked
+    to choose a group.
+  - Type part of a group name to filter the existing list (same behaviour as categories).
+  - Press **Enter** on an empty line to accept the current filter text as the group name.
+  - If the group does not exist yet, it is created and added to `groups.txt`.
+  - Type `:q` to stop and choose whether to save.
+
+- **Quit token**
+  - At any interactive prompt, typing `:q` (configurable in the code as `QUIT_TOKEN`)
+    raises a controlled abort:
+    - You will be asked: "`:q` received. Save categorizations so far? [y/N]".
+    - Answer **y** to write `categories.txt`, `groups.txt`, and `rules.json` with all
+      changes made so far.
+    - Any other answer exits without writing any changes from this run.
+
 
 ## 4. Recommended iterative workflow
 
