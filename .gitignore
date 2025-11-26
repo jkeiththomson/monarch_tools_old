@@ -25,6 +25,9 @@ env/
 build/
 dist/
 
+# Mac OS
+.DS_Store
+
 # Outputs & analysis
 out/
 _analysis/
