@@ -1,22 +1,17 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "monarch-tools"
-version = "0.2.0"
-description = "Clean CLI toolbox with PyCharm module-mode configs."
-authors = [{ name = "Keith Thomson" }]
+version = "0.1.0"
+description = "Monarch Tools CLI"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 dependencies = []
-
-[project.scripts]
-monarch-tools = "monarch_tools.console:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["monarch_tools*"]
