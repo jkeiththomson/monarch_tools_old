@@ -28,3 +28,4 @@ dist/
 # Outputs & analysis
 out/
 _analysis/
+.DS_Store
