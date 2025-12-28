@@ -3,31 +3,21 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from monarch_tools.extractors.chase.activity import extract_activity
+from monarch_tools.extractors import extract_chase_activity
 
 
 def cmd_extract(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="monarch-tools extract")
-    parser.add_argument("--pdf", required=True, help="Path to statement PDF")
-    parser.add_argument("--out", required=True, help="Output directory")
+    p = argparse.ArgumentParser(prog="monarch-tools extract")
+    p.add_argument("--pdf", required=True, help="Path to statement PDF")
+    p.add_argument("--out", required=True, help="Output directory")
+    args = p.parse_args(argv)
 
-    args = parser.parse_args(argv)
-
-    pdf_path = Path(args.pdf).expanduser()
-    out_dir = Path(args.out).expanduser()
-
-    if not pdf_path.exists():
-        raise SystemExit(f"ERROR: PDF not found: {pdf_path}")
-
-    if pdf_path.suffix.lower() != ".pdf":
-        raise SystemExit(f"ERROR: Not a PDF: {pdf_path}")
-
+    pdf_path = Path(args.pdf).expanduser().resolve()
+    out_dir = Path(args.out).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    outputs = extract_activity(pdf_path=pdf_path, out_dir=out_dir)
+    out_csv = out_dir / f"{pdf_path.stem}.monarch.csv"
 
-    print("wrote:")
-    for name, path in outputs.items():
-        print(f"  {name}: {path}")
-
+    result = extract_chase_activity(pdf_path=pdf_path, out_csv=out_csv)
+    print(f"wrote:\n  monarch: {result}")
     return 0
