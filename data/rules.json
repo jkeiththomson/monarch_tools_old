@@ -1,36 +1,7 @@
 {
   "version": 1,
   "merchants": {
-    "Payment Thank You - Bill Pay Service": "Transfers"
+    "AMAZON.COM AMZN.COM/BILL WA": "Misc Amazon"
   },
-  "patterns": [
-    { "regex": "^Amazon\\.com", "category": "Shopping" },
-    { "regex": "^AMAZON MKTPLACE PMTS", "category": "Shopping" },
-
-    { "regex": "^LUNARDI'S", "category": "Groceries" },
-    { "regex": "^SAFEWAY", "category": "Groceries" },
-    { "regex": "^WHOLEFDS", "category": "Groceries" },
-
-    { "regex": "^PLAYSTATION NETWORK", "category": "Entertainment" },
-    { "regex": "^CENTURY THEATRES", "category": "Entertainment" },
-    { "regex": "^ZELLERBACH HALL", "category": "Entertainment" },
-    { "regex": "^APL\\* ITUNES\\.COM/BILL", "category": "Entertainment" },
-
-    { "regex": "^CHEVRON", "category": "Transportation" },
-
-    { "regex": "^MCDONALDS", "category": "Dining" },
-    { "regex": "^MUNCHRY", "category": "Dining" },
-
-    { "regex": "^CVS/PHARMACY", "category": "Health" },
-    { "regex": "^WALGREENS", "category": "Health" },
-
-    { "regex": "^BLUE SHIELD", "category": "Insurance" },
-
-    { "regex": "^WAL-MART", "category": "Shopping" },
-    { "regex": "^PETSMART", "category": "Shopping" },
-
-    { "regex": "^BED BATH", "category": "Shopping" },
-
-    { "regex": "^HOVER", "category": "Utilities" }
-  ]
+  "patterns": []
 }

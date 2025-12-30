@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "merchants": {
+    "Payment Thank You - Bill Pay Service": "Transfers",
+    "0546/2CA046 SEES CANDY 415-583-7307 CA": "Groceries",
+    "AT&T*BILL PAYMENT 800-331-0500 TX": "Utilities",
+    "AVANTI PIZZA FRESH PASTA BELMONT CA": "Dining",
+    "AVEDA EC#736 SAN MATEO CA": "Shopping",
+    "Audible adbl.co/bill NJ": "Entertainment",
+    "BAGEL ST. CAFE MENLO PARK CA": "Dining",
+    "BAY AREA SELF STORAGE 000-0000000 CA": "Utilities",
+    "BLS*MULTIFIT 18663127733": "Health",
+    "CA PARK FEES SANTA CRUZ CA": "Travel",
+    "CHARDONNAY SAILING STRIPE.COM CA": "Travel",
+    "COASTSIDE BOOKS HALF MOON BAY CA": "Entertainment",
+    "COMCAST CALIFORNIA 800-COMCAST CA": "Utilities",
+    "COSTCO ONLINE RX 800-955-2292 WA": "Shopping",
+    "DRI*CRASHPLAN PRO 952-908-4089 MN": "Insurance",
+    "EB GAMES #4570 SAN MATEO CA": "Entertainment",
+    "EP MANAGEMENT SERVICES SAN FRANCISCO CA": "Insurance",
+    "FANDANGO.COM FANDANGO.COM CA": "Entertainment",
+    "FASTRAK CSC 415-486-8655 CA": "Travel",
+    "GATOR GAMES & HOBBY SAN MATEO CA": "Entertainment"
+  },
+  "patterns": [
+    { "regex": "^GOOGLE \\*Google Storage", "category": "Utilities" },
+    { "regex": "^HLU\\*Hulu", "category": "Entertainment" },
+    { "regex": "^Kindle Unlimited", "category": "Entertainment" },
+
+    { "regex": "^JCPENNEY\\.COM", "category": "Shopping" },
+    { "regex": "^MACYS", "category": "Shopping" },
+
+    { "regex": "^HEALTHY PAWS", "category": "Insurance" },
+
+    { "regex": "^GOLDEN STATE SMOG", "category": "Transportation" },
+
+    { "regex": "^HAWTHORN SUITES", "category": "Travel" },
+    { "regex": "^HUDSON", "category": "Travel" },
+    { "regex": "^LAZ PKG", "category": "Travel" },
+
+    { "regex": "^Amazon\\.com", "category": "Shopping" },
+    { "regex": "^AMAZON MKTPLACE PMTS", "category": "Shopping" },
+    { "regex": "^LUNARDI'S", "category": "Groceries" },
+    { "regex": "^SAFEWAY", "category": "Groceries" },
+    { "regex": "^WHOLEFDS", "category": "Groceries" },
+    { "regex": "^PLAYSTATION NETWORK", "category": "Entertainment" },
+    { "regex": "^CENTURY THEATRES", "category": "Entertainment" },
+    { "regex": "^ZELLERBACH HALL", "category": "Entertainment" },
+    { "regex": "^APL\\* ITUNES\\.COM/BILL", "category": "Entertainment" },
+    { "regex": "^CHEVRON", "category": "Transportation" },
+    { "regex": "^MCDONALDS", "category": "Dining" },
+    { "regex": "^MUNCHRY", "category": "Dining" },
+    { "regex": "^CVS/PHARMACY", "category": "Health" },
+    { "regex": "^WALGREENS", "category": "Health" },
+    { "regex": "^BLUE SHIELD", "category": "Insurance" },
+    { "regex": "^WAL-MART", "category": "Shopping" },
+    { "regex": "^PETSMART", "category": "Shopping" },
+    { "regex": "^BED BATH", "category": "Shopping" },
+    { "regex": "^HOVER", "category": "Utilities" }
+  ]
+}
