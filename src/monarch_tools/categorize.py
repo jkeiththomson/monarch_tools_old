@@ -276,7 +276,6 @@ def cmd_categorize(argv: List[str]) -> int:
         editing = False
         buf = ""
         cur = 0
-        esc_armed = False
 
     def begin_edit() -> None:
         nonlocal editing, buf, cur
@@ -350,15 +349,8 @@ def cmd_categorize(argv: List[str]) -> int:
         stdscr.erase()
         h, w = stdscr.getmaxyx()
 
-        # Layout: reserve a right-side legend panel if we have enough width
-        legend_w = 34
-        show_legend = w >= 120
-        legend_x = w - legend_w if show_legend else w
-        table_w = legend_x - 1  # keep one column gap
-
         # Colors
-        has_colors = curses.has_colors()
-        if has_colors:
+        if curses.has_colors():
             curses.start_color()
             curses.use_default_colors()
             curses.init_pair(1, curses.COLOR_RED, -1)
@@ -367,118 +359,46 @@ def cmd_categorize(argv: List[str]) -> int:
             curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_BLUE)  # focused cell
 
         def cattr_for(t: Tx) -> int:
-            if not has_colors:
-                return curses.A_NORMAL
+            if not curses.has_colors():
+                return 0
             if t.status == "green":
-                return curses.color_pair(3) | curses.A_BOLD
+                return curses.color_pair(3)
             if t.status == "yellow":
                 return curses.color_pair(2)
             return curses.color_pair(1)
 
-        # Category IDs (displayed in taxonomy; also usable by typing numbers)
-        # IDs must start at 1 and be stable: put "Uncategorized" first, then the rest alpha.
-        other_cats = sorted({c for c in cats if c.lower() != "uncategorized"}, key=lambda x: x.lower())
-        cats_sorted = ["Uncategorized"] + other_cats
-        cat_id = {c: i + 1 for i, c in enumerate(cats_sorted)}
-
-        # Taxonomy lines (group -> categories, each with an ID)
+        # Taxonomy lines
         tax_lines: List[str] = []
-        if groups:
-            for g in sorted(groups.keys(), key=lambda x: x.lower()):
-                tax_lines.append(f"{g}:")
-                for c in sorted(groups[g], key=lambda x: x.lower()):
-                    cid = cat_id.get(c, 0)
-                    prefix = f"{cid:>3d}) " if cid else "    "
-                    tax_lines.append(f"  {prefix}{c}")
-                tax_lines.append("")
-        else:
-            tax_lines = ["(no groups yet)", ""]
-
-        # Show categories that exist but aren't in any group
-        grouped_cats = set()
-        for _g, _cs in groups.items():
-            grouped_cats.update(_cs)
-        ungrouped = [c for c in cats_sorted if c not in grouped_cats]
-        if ungrouped:
-            tax_lines.append("Other:")
-            for c in ungrouped:
-                cid = cat_id.get(c, 0)
-                prefix = f"{cid:>3d}) " if cid else "    "
-                tax_lines.append(f"  {prefix}{c}")
+        for g in sorted(groups.keys(), key=lambda x: x.lower()):
+            tax_lines.append(f"{g}:")
+            for c in sorted(groups[g], key=lambda x: x.lower()):
+                tax_lines.append(f"  {c}")
             tax_lines.append("")
-
+        if not tax_lines:
+            tax_lines = ["(no groups yet)", ""]
         while tax_lines and tax_lines[-1] == "":
             tax_lines.pop()
 
-        # Dynamic split: taxonomy only takes what it needs (capped at half screen)
+        # Dynamic split
         top_h = min(h // 2, max(3, len(tax_lines) + 1))
         bot_y = top_h
         bot_h = h - bot_y
 
-        # --- TAXONOMY ---
+        # Taxonomy header
         stdscr.addstr(0, 0, "TAXONOMY", curses.A_BOLD)
-        q = ""
-        mode = None
-        if editing and buf:
-            # highlight taxonomy matches while typing (case-insensitive)
-            if any(ch.isalpha() for ch in buf):
-                q = buf.lower()
-                mode = field  # 'cat' or 'grp'
-
-        def _add_tax_line(y: int, s: str) -> None:
-            s = s[:table_w]
-            if not has_colors or not q or not mode:
-                stdscr.addstr(y, 0, s)
-                return
-
-            # group header like "Health:" or indented category like "    3) Doctor"
-            if mode == "grp" and s.endswith(":") and not s.startswith(" "):
-                name = s[:-1]
-                low = name.lower()
-                j = low.find(q)
-                if j < 0:
-                    stdscr.addstr(y, 0, s)
-                    return
-                stdscr.addstr(y, 0, name[:j] + name[j+len(q):] + ":")  # draw base
-                # overlay match in green
-                stdscr.addstr(y, j, name[j:j+len(q)], curses.color_pair(3) | curses.A_BOLD)
-                return
-
-            if mode == "cat" and s.lstrip().startswith(tuple(str(k) for k in range(10))) is False:
-                # not robust; fall through
-                pass
-
-            if mode == "cat" and ")" in s:
-                # find category name after ") "
-                try:
-                    pre, name = s.split(") ", 1)
-                    pre = pre + ") "
-                except ValueError:
-                    stdscr.addstr(y, 0, s)
-                    return
-                low = name.lower()
-                j = low.find(q)
-                if j < 0:
-                    stdscr.addstr(y, 0, s)
-                    return
-                stdscr.addstr(y, 0, pre + name)  # base
-                stdscr.addstr(y, len(pre) + j, name[j:j+len(q)], curses.color_pair(3) | curses.A_BOLD)
-                return
-
-            stdscr.addstr(y, 0, s)
-
         for i, line in enumerate(tax_lines[: top_h - 1], start=1):
-            _add_tax_line(i, line)
+            stdscr.addstr(i, 0, line[: w - 1])
 
-        # --- TRANSACTIONS ---
+        # Transactions header
         if bot_h <= 3:
             stdscr.addstr(top_h, 0, "Terminal too small. Resize taller.", curses.A_BOLD)
             stdscr.refresh()
             return
 
         header = "Num  StmtDate     TxnDate      Amount      Description                           Category               Group"
-        stdscr.addstr(bot_y, 0, header[: table_w], curses.A_BOLD)
+        stdscr.addstr(bot_y, 0, header[: w - 1], curses.A_BOLD)
 
+        # Visible rows
         visible = bot_h - 2
         if sel < scroll:
             scroll = sel
@@ -486,10 +406,11 @@ def cmd_categorize(argv: List[str]) -> int:
             scroll = sel - visible + 1
 
         # Column widths (constant)
-        cat_w = max(16, min(28, max((len(c) for c in cats_sorted), default=12)))
+        cat_w = max(16, min(28, max((len(c) for c in cats), default=12)))
         grp_w = max(12, min(24, max((len(g) for g in groups.keys()), default=5)))
 
-        # Draw rows
+        # compute start columns based on header pieces
+        # We'll format the line ourselves so we can re-draw the focused cell segment.
         for i in range(visible):
             idx = scroll + i
             y = bot_y + 1 + i
@@ -505,61 +426,34 @@ def cmd_categorize(argv: List[str]) -> int:
             txd = f"{t.txn_date:10.10s}"
             amt = f"{t.amount:>10.10s}"
             desc = (t.description or "")[:35].ljust(35)
-
-            cat_val = (t.category or "")
-            grp_val = (t.group or "")
-
-            cat = cat_val[:cat_w].ljust(cat_w)
-            grp = grp_val[:grp_w].ljust(grp_w)
+            cat = (t.category or "")[:cat_w].ljust(cat_w)
+            grp = (t.group or "")[:grp_w].ljust(grp_w)
 
             # If editing selected field, show live buffer in that cell
             if idx == sel and editing:
+                live = (buf[:cat_w] if field == "cat" else buf[:grp_w])
                 if field == "cat":
-                    cat = buf[:cat_w].ljust(cat_w)
+                    cat = live.ljust(cat_w)
                 else:
-                    grp = buf[:grp_w].ljust(grp_w)
+                    grp = live.ljust(grp_w)
 
             line = f"{num}  {stmt}  {txd}  {amt}  {desc}  {cat}  {grp}"
-            stdscr.addstr(y, 0, line[: table_w], base_attr)
+            stdscr.addstr(y, 0, line[: w - 1], base_attr)
 
-            # Focused cell highlight (always visible; uses color if available)
-            if idx == sel:
-                # prefix width before Cat: 78
+            # Focused cell highlight
+            if idx == sel and curses.has_colors():
+                focus_attr = curses.color_pair(4) | curses.A_BOLD
+                # Calculate x positions
+                # prefix: num(3)+2 + stmt(10)+2 + txd(10)+2 + amt(10)+2 + desc(35)+2 = 3+2+10+2+10+2+10+2+35+2 = 78
                 cat_x = 78
                 grp_x = cat_x + cat_w + 2
-                focus_base = curses.A_REVERSE | curses.A_BOLD
-                if has_colors:
-                    focus_base = curses.color_pair(4) | curses.A_BOLD
                 if field == "cat":
-                    cell_txt = cat[:cat_w].ljust(cat_w)
-                    stdscr.addstr(y, cat_x, cell_txt[: max(0, min(cat_w, table_w - cat_x))], focus_base)
+                    stdscr.addstr(y, cat_x, cat[: min(cat_w, w - 1 - cat_x)], focus_attr)
                 else:
-                    cell_txt = grp[:grp_w].ljust(grp_w)
-                    stdscr.addstr(y, grp_x, cell_txt[: max(0, min(grp_w, table_w - grp_x))], focus_base)
+                    stdscr.addstr(y, grp_x, grp[: min(grp_w, w - 1 - grp_x)], focus_attr)
 
-        # Status line (left)
-        stdscr.addstr(h - 1, 0, (" " + status)[: table_w])
-
-        # Key legend (right)
-        if show_legend:
-            lx = legend_x
-            stdscr.vline(0, lx - 1, curses.ACS_VLINE, h)
-            legend = [
-                "KEYS",
-                "",
-                "Arrows   Move rows",
-                "Tab      Next field",
-                "S-Tab    Prev field",
-                "Type     Edit field",
-                "Left/Right Move cursor",
-                "Enter    Confirm",
-                "Del      Clear field",
-                "",
-                "ESC q    Quit (confirm)",
-                "ESC s    Save (confirm)",
-            ]
-            for i, line in enumerate(legend[: h], start=0):
-                stdscr.addstr(i, lx, line[: legend_w - 1])
+        # Status line
+        stdscr.addstr(h - 1, 0, (" " + status)[: w - 1])
 
         # Put cursor inside the focused cell during editing (best-effort)
         if editing:
@@ -567,10 +461,7 @@ def cmd_categorize(argv: List[str]) -> int:
             grp_x = cat_x + cat_w + 2
             x0 = cat_x if field == "cat" else grp_x
             maxw = cat_w if field == "cat" else grp_w
-            try:
-                stdscr.move(bot_y + 1 + (sel - scroll), min(x0 + cur, x0 + maxw - 1))
-            except curses.error:
-                pass
+            stdscr.move(bot_y + 1 + (sel - scroll), min(x0 + cur, x0 + maxw - 1))
 
         stdscr.refresh()
 
@@ -586,53 +477,32 @@ def cmd_categorize(argv: List[str]) -> int:
         editing = False
         buf = ""
         cur = 0
-        esc_armed = False
 
         while True:
             draw(stdscr)
             ch = stdscr.getch()
 
-            # ESC-armed commands (ESC then q/s)
-            if ch == 27:  # ESC
-                esc_armed = True
-                status = "ESC: press q to quit, s to save."
+            # Save / quit
+            if ch in (ord("q"),):
+                # simple confirm modal
+                h, w = stdscr.getmaxyx()
+                msg = "Quit without saving? (y/n)"
+                stdscr.addstr(h // 2, max(0, (w - len(msg)) // 2), msg, curses.A_REVERSE)
+                stdscr.refresh()
+                c2 = stdscr.getch()
+                if c2 in (ord("y"), ord("Y")):
+                    return 0
+                status = "Continue."
                 continue
 
-            if esc_armed:
-                esc_armed = False
-                if ch in (ord("q"), ord("Q")):
-                    # confirm: Save before quitting?
-                    h, w = stdscr.getmaxyx()
-                    msg = "Save before quitting? (y/n)"
-                    stdscr.addstr(h // 2, max(0, (w - len(msg)) // 2), msg, curses.A_REVERSE)
-                    stdscr.refresh()
-                    c2 = stdscr.getch()
-                    if c2 in (ord("y"), ord("Y")):
-                        write_transactions_csv(out_csv, rows)
-                        save_categories(cats_path, cats)
-                        save_groups(groups_path, groups)
-                        save_rules(rules_path, rules)
-                        return 0
-                    if c2 in (ord("n"), ord("N")):
-                        return 0
-                    status = "Continue."
-                    continue
-
-                if ch in (ord("s"), ord("S")):
-                    h, w = stdscr.getmaxyx()
-                    msg = "Save current? (y/n)"
-                    stdscr.addstr(h // 2, max(0, (w - len(msg)) // 2), msg, curses.A_REVERSE)
-                    stdscr.refresh()
-                    c2 = stdscr.getch()
-                    if c2 in (ord("y"), ord("Y")):
-                        write_transactions_csv(out_csv, rows)
-                        save_categories(cats_path, cats)
-                        save_groups(groups_path, groups)
-                        save_rules(rules_path, rules)
-                        status = f"Saved: {out_csv}"
-                    else:
-                        status = "Not saved."
-                    continue
+            if ch in (ord("s"),):
+                # write files
+                write_transactions_csv(out_csv, rows)
+                save_categories(cats_path, cats)
+                save_groups(groups_path, groups)
+                save_rules(rules_path, rules)
+                status = f"Saved: {out_csv}"
+                continue
 
             # Delete clears focused cell
             if ch in (curses.KEY_DC,):
@@ -680,16 +550,6 @@ def cmd_categorize(argv: List[str]) -> int:
                     t = txs[sel]
                     if field == "cat":
                         if val:
-                            # Allow numeric category-id selection (shown in taxonomy)
-                            if val.isdigit():
-                                n = int(val)
-                                other_cats = sorted({c for c in cats if c.lower() != "uncategorized"}, key=lambda x: x.lower())
-                                cats_sorted = ["Uncategorized"] + other_cats
-                                if 1 <= n <= len(cats_sorted):
-                                    val = cats_sorted[n - 1]
-                                else:
-                                    status = f"Invalid category id: {n}"
-                                    continue
                             val = find_existing(val, cats)
                             t.category = val
                             rows[sel]["category"] = val
@@ -746,7 +606,7 @@ def cmd_categorize(argv: List[str]) -> int:
                 cur += 1
                 continue
 
-            status = "Unknown key. Use arrows, type, Enter, TAB, Del, ESC+q, ESC+s."
+            status = "Unknown key. Use arrows, type, Enter, TAB, s, q."
 
     try:
         return curses.wrapper(run)
@@ -758,5 +618,3 @@ def cmd_categorize(argv: List[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(cmd_categorize([]))
-
-

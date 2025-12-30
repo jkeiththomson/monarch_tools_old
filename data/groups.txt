@@ -1,5 +1,1 @@
-Shopping:
-  Misc Amazon
-
-Other:
-  Uncategorized
+Other

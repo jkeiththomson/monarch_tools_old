@@ -142,6 +142,41 @@ def find_existing_key(name: str, keys: List[str]) -> str:
     return name
 
 
+
+def best_autocomplete(typed: str, options: List[str]) -> str:
+    """Return the best full option to autocomplete to (case-insensitive), or "" if none.
+
+    Preference:
+      1) startswith matches (shortest completion)
+      2) contains matches
+    """
+    t = typed.strip()
+    if not t:
+        return ""
+    lo = t.lower()
+    starts = [o for o in options if o.lower().startswith(lo)]
+    if starts:
+        # choose shortest (most specific) then alphabetical
+        return sorted(starts, key=lambda s: (len(s), s.lower()))[0]
+    contains = [o for o in options if lo in o.lower()]
+    if contains:
+        return sorted(contains, key=lambda s: (len(s), s.lower()))[0]
+    return ""
+
+def autocomplete_suffix(typed: str, options: List[str]) -> str:
+    best = best_autocomplete(typed, options)
+    if not best:
+        return ""
+    t = typed.rstrip()
+    if not t:
+        return ""
+    # If already equal (case-insensitive), no suffix.
+    if best.lower() == t.lower():
+        return ""
+    if best.lower().startswith(t.lower()):
+        return best[len(t):]
+    return ""
+
 # ----------------------------
 # Domain model
 # ----------------------------
@@ -412,69 +447,83 @@ def cmd_categorize(argv: List[str]) -> int:
 
         # Dynamic split: taxonomy only takes what it needs (capped at half screen)
         top_h = min(h // 2, max(3, len(tax_lines) + 1))
-        bot_y = top_h
+        bot_y = top_h + 1  # leave a blank line between taxonomy and transactions
         bot_h = h - bot_y
 
         # --- TAXONOMY ---
         stdscr.addstr(0, 0, "TAXONOMY", curses.A_BOLD)
-        q = ""
-        mode = None
-        if editing and buf:
-            # highlight taxonomy matches while typing (case-insensitive)
-            if any(ch.isalpha() for ch in buf):
-                q = buf.lower()
-                mode = field  # 'cat' or 'grp'
-
-        def _add_tax_line(y: int, s: str) -> None:
-            s = s[:table_w]
-            if not has_colors or not q or not mode:
-                stdscr.addstr(y, 0, s)
+        needle = buf.lower().strip() if editing and buf.strip() else ""
+        target = field if editing else ""
+        def _add_highlighted(y: int, x: int, full: str) -> None:
+            # Highlight `needle` inside group/category names while editing.
+            if not needle or not target:
+                stdscr.addstr(y, x, full[: table_w])
                 return
 
-            # group header like "Health:" or indented category like "    3) Doctor"
-            if mode == "grp" and s.endswith(":") and not s.startswith(" "):
-                name = s[:-1]
-                low = name.lower()
-                j = low.find(q)
+            # Group header lines end with ":" (e.g., "Shopping:")
+            is_group = full.rstrip().endswith(":") and not full.startswith("  ")
+            # Category lines look like "    12) Some Cat"
+            is_cat = ") " in full and full.lstrip().startswith(tuple(str(d) for d in range(10)))
+
+            if target == "grp" and is_group:
+                name = full.rstrip()[:-1]  # strip ':'
+                prefix = ""
+                suffix = ":"
+            elif target == "cat" and is_cat:
+                # Split on first ') '
+                left, name = full.split(") ", 1)
+                prefix = left + ") "
+                suffix = ""
+            else:
+                stdscr.addstr(y, x, full[: table_w])
+                return
+
+            # Find match ranges in name
+            lo = name.lower()
+            ranges = []
+            start = 0
+            while True:
+                j = lo.find(needle, start)
                 if j < 0:
-                    stdscr.addstr(y, 0, s)
-                    return
-                stdscr.addstr(y, 0, name[:j] + name[j+len(q):] + ":")  # draw base
-                # overlay match in green
-                stdscr.addstr(y, j, name[j:j+len(q)], curses.color_pair(3) | curses.A_BOLD)
-                return
+                    break
+                ranges.append((j, j + len(needle)))
+                start = j + len(needle)
 
-            if mode == "cat" and s.lstrip().startswith(tuple(str(k) for k in range(10))) is False:
-                # not robust; fall through
-                pass
+            # Draw prefix
+            curx = x
+            if prefix:
+                stdscr.addstr(y, curx, prefix[: max(0, table_w - curx)])
+                curx += len(prefix)
 
-            if mode == "cat" and ")" in s:
-                # find category name after ") "
-                try:
-                    pre, name = s.split(") ", 1)
-                    pre = pre + ") "
-                except ValueError:
-                    stdscr.addstr(y, 0, s)
-                    return
-                low = name.lower()
-                j = low.find(q)
-                if j < 0:
-                    stdscr.addstr(y, 0, s)
-                    return
-                stdscr.addstr(y, 0, pre + name)  # base
-                stdscr.addstr(y, len(pre) + j, name[j:j+len(q)], curses.color_pair(3) | curses.A_BOLD)
-                return
+            # Draw name with highlighted substrings
+            for idx_ch, ch in enumerate(name):
+                if curx >= table_w:
+                    break
+                in_match = any(a <= idx_ch < b for a, b in ranges)
+                attr = curses.color_pair(3) | curses.A_BOLD if in_match else 0
+                stdscr.addstr(y, curx, ch, attr)
+                curx += 1
 
-            stdscr.addstr(y, 0, s)
+            if suffix and curx < table_w:
+                stdscr.addstr(y, curx, suffix[: max(0, table_w - curx)])
 
         for i, line in enumerate(tax_lines[: top_h - 1], start=1):
-            _add_tax_line(i, line)
+            try:
+                _add_highlighted(i, 0, line)
+            except curses.error:
+                pass
 
         # --- TRANSACTIONS ---
         if bot_h <= 3:
             stdscr.addstr(top_h, 0, "Terminal too small. Resize taller.", curses.A_BOLD)
             stdscr.refresh()
             return
+
+        # blank spacer line
+        try:
+            stdscr.addstr(top_h, 0, (" " * w))
+        except curses.error:
+            pass
 
         header = "Num  StmtDate     TxnDate      Amount      Description                           Category               Group"
         stdscr.addstr(bot_y, 0, header[: table_w], curses.A_BOLD)
@@ -522,20 +571,50 @@ def cmd_categorize(argv: List[str]) -> int:
             line = f"{num}  {stmt}  {txd}  {amt}  {desc}  {cat}  {grp}"
             stdscr.addstr(y, 0, line[: table_w], base_attr)
 
-            # Focused cell highlight (always visible; uses color if available)
-            if idx == sel:
-                # prefix width before Cat: 78
-                cat_x = 78
-                grp_x = cat_x + cat_w + 2
+            # Focused cell highlight
+        if has_focus and bot_h >= 3:
+            # selected row is always the first visible row (sel is screen-relative 0..)
+            if 0 <= sel < len(visible):
+                y = 1 + sel
                 focus_base = curses.A_REVERSE | curses.A_BOLD
                 if has_colors:
                     focus_base = curses.color_pair(4) | curses.A_BOLD
+
+                tsel = visible[sel]
+                cat_text = tsel.category
+                grp_text = tsel.group
+
+                # Autocomplete preview while editing
+                if editing and field == "cat":
+                    suf = autocomplete_suffix(buf, cats)
+                    cat_text = buf + suf
+                if editing and field == "grp":
+                    suf = autocomplete_suffix(buf, grps)
+                    grp_text = buf + suf
+
                 if field == "cat":
-                    cell_txt = cat[:cat_w].ljust(cat_w)
-                    stdscr.addstr(y, cat_x, cell_txt[: max(0, min(cat_w, table_w - cat_x))], focus_base)
+                    # draw typed portion normal focus, suffix dim if present
+                    suf = ""
+                    typed = cat_text
+                    if editing:
+                        suf = autocomplete_suffix(buf, cats)
+                        typed = buf
+                    typed = typed[:cat_w]
+                    suf = suf[: max(0, cat_w - len(typed))]
+                    stdscr.addstr(y, cat_x, typed.ljust(cat_w)[: max(0, min(cat_w, table_w - cat_x))], focus_base)
+                    if suf and (cat_x + len(typed)) < table_w:
+                        stdscr.addstr(y, cat_x + len(typed), suf, focus_base | curses.A_DIM)
                 else:
-                    cell_txt = grp[:grp_w].ljust(grp_w)
-                    stdscr.addstr(y, grp_x, cell_txt[: max(0, min(grp_w, table_w - grp_x))], focus_base)
+                    suf = ""
+                    typed = grp_text
+                    if editing:
+                        suf = autocomplete_suffix(buf, grps)
+                        typed = buf
+                    typed = typed[:grp_w]
+                    suf = suf[: max(0, grp_w - len(typed))]
+                    stdscr.addstr(y, grp_x, typed.ljust(grp_w)[: max(0, min(grp_w, table_w - grp_x))], focus_base)
+                    if suf and (grp_x + len(typed)) < table_w:
+                        stdscr.addstr(y, grp_x + len(typed), suf, focus_base | curses.A_DIM)
 
         # Status line (left)
         stdscr.addstr(h - 1, 0, (" " + status)[: table_w])
@@ -672,10 +751,16 @@ def cmd_categorize(argv: List[str]) -> int:
                 continue
 
             # Enter confirms / commits
-            if ch in (10, 13):
+            if ch in (10, 13, curses.KEY_ENTER, 343):
                 if editing:
                     # Commit buffer into field (but do not confirm unless both valid)
-                    val = buf.strip()
+                                        # Autocomplete on Enter: append the current suggestion (if any)
+                    opts = cats if field == "cat" else grps
+                    suf = autocomplete_suffix(buf, opts)
+                    if suf:
+                        buf += suf
+                        cur = len(buf)
+val = buf.strip()
                     cancel_edit()
                     t = txs[sel]
                     if field == "cat":
@@ -758,5 +843,3 @@ def cmd_categorize(argv: List[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(cmd_categorize([]))
-
-

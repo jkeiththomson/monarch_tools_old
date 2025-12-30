@@ -14,13 +14,11 @@ def cmd_help(argv: List[str]) -> int:
 
     cmds = registry()
     for name in sorted(cmds.keys()):
-        # If a command module provides a docstring on the function, use first line as description.
         fn = cmds[name]
         desc = ""
         if getattr(fn, "__doc__", None):
             desc = (fn.__doc__ or "").strip().splitlines()[0].strip()
         if not desc:
-            # Fallback descriptions for known commands
             fallback = {
                 "hello": "Sanity check the CLI wiring",
                 "version": "Print package version",
@@ -29,6 +27,7 @@ def cmd_help(argv: List[str]) -> int:
                 "categorize": "Categorize transactions using rules + taxonomy",
                 "assign": "Interactive rule-building from unmatched merchants",
                 "assign_tui": "Full-screen TUI for assigning merchants",
+                "clean": "Reset taxonomy to Uncategorized/Other and clear rules.json",
             }
             desc = fallback.get(name, "")
 
