@@ -30,7 +30,7 @@ def registry() -> Dict[str, CommandFn]:
         # Keep these if present in your repo; harmless if you don't call them.
         "assign": _lazy("monarch_tools.commands.assign", "cmd_assign"),
         "assign_tui": _lazy("monarch_tools.commands.assign_tui", "cmd_assign_tui"),
-        "clean": cmd_clean,
+        "clean": _lazy("monarch_tools.commands.clean", "cmd_clean"),
     }
 
 
