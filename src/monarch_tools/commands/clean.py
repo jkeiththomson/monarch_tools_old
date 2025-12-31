@@ -1,51 +1,36 @@
 from __future__ import annotations
 
-import argparse
-import json
 from pathlib import Path
 from typing import List
 
 
 def cmd_clean(argv: List[str]) -> int:
-    """
-    Reset categories, groups, and rules to a clean baseline.
-    """
+    """Reset taxonomy + rules files under ./data to known-good defaults."""
+    import argparse
 
-    parser = argparse.ArgumentParser(prog="monarch-tools clean")
-    parser.add_argument("--categories", required=True)
-    parser.add_argument("--groups", required=True)
-    parser.add_argument("--rules", required=True)
+    from monarch_tools.defaults import read_default_text
 
-    args = parser.parse_args(argv)
-
-    categories_path = Path(args.categories)
-    groups_path = Path(args.groups)
-    rules_path = Path(args.rules)
-
-    # --- Write groups ---
-    groups_path.write_text(
-        "Other\n",
-        encoding="utf-8",
+    ap = argparse.ArgumentParser(prog="monarch-tools clean")
+    ap.add_argument(
+        "--data-dir",
+        default="data",
+        help="Directory containing categories.txt, groups.txt, and rules.json (default: ./data)",
     )
+    ns = ap.parse_args(argv)
 
-    # --- Write categories ---
-    categories_path.write_text(
-        "Uncategorized\tOther\n",
-        encoding="utf-8",
-    )
+    data_dir = Path(ns.data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- Write rules ---
-    rules_path.write_text(
-        json.dumps([], indent=2) + "\n",
-        encoding="utf-8",
-    )
+    targets = [
+        ("categories.txt", data_dir / "categories.txt"),
+        ("groups.txt", data_dir / "groups.txt"),
+        ("rules.json", data_dir / "rules.json"),
+    ]
 
-    print("Cleaned:")
-    print(f"  categories -> {categories_path}")
-    print(f"  groups     -> {groups_path}")
-    print(f"  rules      -> {rules_path}")
-    print("\nBaseline:")
-    print("  Group: Other")
-    print("  Category: Uncategorized -> Other")
+    for default_name, target in targets:
+        target.write_text(read_default_text(default_name), encoding="utf-8")
 
+    print(f"Reset: {data_dir/'categories.txt'}")
+    print(f"Reset: {data_dir/'groups.txt'}")
+    print(f"Reset: {data_dir/'rules.json'}")
     return 0
