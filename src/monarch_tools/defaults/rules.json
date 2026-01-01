@@ -2,7 +2,3 @@
   "merchants": {
   }
 }
-(.venv) ~/dev/mon/monarch-tools (main) > python -m monarch_tools clean
-cat data/categories.txt
-cat data/groups.txt
-cat data/rules.json
