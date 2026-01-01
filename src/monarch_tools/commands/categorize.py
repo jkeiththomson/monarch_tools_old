@@ -1,111 +1,76 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import curses
+import csv
 import json
 import os
+import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
 
-# ----------------------------
-# File formats / utilities
-# ----------------------------
+# ---------------------------------------------------------------------
+# Data model
+# ---------------------------------------------------------------------
 
-def normalize_merchant(s: str) -> str:
-    # Keep it simple + stable: uppercase + collapse whitespace
-    return " ".join((s or "").strip().upper().split())
-
-
-def load_rules(path: Path) -> Dict[str, str]:
-    if not path.exists():
-        return {}
-    data = json.loads(path.read_text(encoding="utf-8"))
-    # Support either {"merchants": {...}} or flat dict
-    if isinstance(data, dict) and "merchants" in data and isinstance(data["merchants"], dict):
-        return {str(k): str(v) for k, v in data["merchants"].items()}
-    if isinstance(data, dict):
-        return {str(k): str(v) for k, v in data.items()}
-    return {}
+@dataclass
+class Tx:
+    num: int
+    statement_date: str
+    txn_date: str
+    amount: str
+    description: str
+    category: str
+    group: str
+    raw: dict
 
 
-def save_rules(path: Path, merchants: Dict[str, str]) -> None:
-    payload = {"merchants": merchants}
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
+# ---------------------------------------------------------------------
+# File loading / saving
+# ---------------------------------------------------------------------
 
 def load_categories(path: Path) -> List[str]:
     if not path.exists():
-        return ["Uncategorized"]
-    cats: List[str] = []
+        return []
+    out: List[str] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
-        if not line or line.startswith("#"):
+        if not line:
             continue
-        cats.append(line)
-    if "Uncategorized" not in cats:
-        cats.append("Uncategorized")
-    # preserve order but de-dupe (case-insensitive)
-    seen = set()
-    out = []
-    for c in cats:
-        k = c.lower()
-        if k in seen:
-            continue
-        seen.add(k)
-        out.append(c)
+        out.append(line)
     return out
 
 
-def save_categories(path: Path, cats: List[str]) -> None:
-    # Keep Uncategorized present, last
-    cats2 = [c for c in cats if c.lower() != "uncategorized"]
-    cats2.sort(key=lambda x: x.lower())
-    cats2.append("Uncategorized")
-    path.write_text("\n".join(cats2) + "\n", encoding="utf-8")
-
-
 def load_groups(path: Path) -> Dict[str, List[str]]:
-    # groups.txt format:
-    # Group:
-    #   Cat
-    #   Cat
-    if not path.exists():
-        return {}
     groups: Dict[str, List[str]] = {}
+    if not path.exists():
+        return groups
+
     cur: Optional[str] = None
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.rstrip("\n")
         if not line.strip():
             continue
-        if not line.startswith((" ", "\t")) and line.endswith(":"):
-            cur = line[:-1].strip()
-            if cur:
-                groups.setdefault(cur, [])
-            continue
-        if cur is None:
-            continue
-        cat = line.strip()
-        if cat:
-            groups.setdefault(cur, []).append(cat)
-    # de-dupe cats in each group
-    for g in list(groups.keys()):
-        seen = set()
-        new = []
-        for c in groups[g]:
-            k = c.lower()
-            if k in seen:
+        if not line.startswith(" "):
+            # Group line "Name:" or "Name"
+            g = line.strip()
+            if g.endswith(":"):
+                g = g[:-1].strip()
+            cur = g
+            groups.setdefault(cur, [])
+        else:
+            if cur is None:
                 continue
-            seen.add(k)
-            new.append(c)
-        groups[g] = new
+            c = line.strip()
+            if c:
+                groups[cur].append(c)
     return groups
 
 
 def save_groups(path: Path, groups: Dict[str, List[str]]) -> None:
-    # Sort groups, cats
     parts: List[str] = []
     for g in sorted(groups.keys(), key=lambda x: x.lower()):
         parts.append(f"{g}:")
@@ -113,434 +78,237 @@ def save_groups(path: Path, groups: Dict[str, List[str]]) -> None:
         for c in cats:
             parts.append(f"  {c}")
         parts.append("")
-    text = "\n".join(parts).rstrip() + "\n"
-    path.write_text(text, encoding="utf-8")
+    path.write_text("\n".join(parts).rstrip() + "\n", encoding="utf-8")
 
 
-def move_category_to_group(groups: Dict[str, List[str]], group: str, category: str) -> None:
-    # Ensure category belongs to exactly one group
-    for g, cats in groups.items():
-        groups[g] = [c for c in cats if c.lower() != category.lower()]
-    groups.setdefault(group, [])
+def load_rules(path: Path) -> List[dict]:
+    if not path.exists():
+        return []
+    raw = path.read_text(encoding="utf-8").strip()
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return []
+    if isinstance(data, list):
+        return data
+    return []
+
+
+def save_rules(path: Path, rules: List[dict]) -> None:
+    path.write_text(json.dumps(rules, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def load_transactions_csv(path: Path) -> Tuple[List[str], List[Tx]]:
+    with path.open("r", encoding="utf-8", newline="") as f:
+        r = csv.DictReader(f)
+        fieldnames = r.fieldnames or []
+        rows = list(r)
+
+    txs: List[Tx] = []
+
+    def get(row: dict, *keys: str) -> str:
+        for k in keys:
+            if k in row and row[k] is not None:
+                return str(row[k])
+        return ""
+
+    for i, row in enumerate(rows):
+        stmt = get(row, "statement_date", "StatementDate", "StmtDate")
+        txn = get(row, "txn_date", "TxnDate", "date", "Date")
+        amt = get(row, "amount", "Amount")
+        desc = get(row, "description", "Description", "merchant", "Merchant", "name", "Name")
+        cat = get(row, "category", "Category")
+        grp = get(row, "group", "Group")
+
+        txs.append(
+            Tx(
+                num=i + 1,
+                statement_date=stmt,
+                txn_date=txn,
+                amount=amt,
+                description=desc,
+                category=cat,
+                group=grp,
+                raw=row,
+            )
+        )
+
+    return fieldnames, txs
+
+
+def save_transactions_csv(path: Path, fieldnames: List[str], txs: List[Tx]) -> None:
+    # Preserve original columns if possible, but ensure category/group exist.
+    fns = list(fieldnames)
+    for must in ("category", "group"):
+        if must not in fns:
+            fns.append(must)
+
+    with path.open("w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fns)
+        w.writeheader()
+        for t in txs:
+            row = dict(t.raw)
+            row["category"] = t.category
+            row["group"] = t.group
+            w.writerow(row)
+
+
+# ---------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------
+
+def normalize(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip()).lower()
+
+
+def autocomplete_suffix(prefix: str, options: List[str]) -> str:
+    p = (prefix or "").strip()
+    if not p:
+        return ""
+    pl = p.lower()
+    for opt in options:
+        if opt.lower().startswith(pl):
+            return opt[len(p):]
+    return ""
+
+
+def ensure_uncategorized(cats: List[str], groups: Dict[str, List[str]]) -> None:
+    if not any(c.lower() == "uncategorized" for c in cats):
+        cats.insert(0, "Uncategorized")
+
+    # Ensure group "Other" exists and contains Uncategorized
+    if "Other" not in groups:
+        groups["Other"] = []
+    if not any(c.lower() == "uncategorized" for c in groups["Other"]):
+        groups["Other"].insert(0, "Uncategorized")
+
+    # Remove Uncategorized from any other group
+    for g in list(groups.keys()):
+        if g == "Other":
+            continue
+        groups[g] = [c for c in groups[g] if c.lower() != "uncategorized"]
+
+
+def ensure_category_in_group(category: str, group: str, cats: List[str], groups: Dict[str, List[str]]) -> None:
+    category = (category or "").strip()
+    group = (group or "").strip()
+    if not category or not group:
+        return
+
+    if not any(c.lower() == category.lower() for c in cats):
+        cats.append(category)
+
+    if group not in groups:
+        groups[group] = []
+
+    # Remove category from other groups
+    for g in list(groups.keys()):
+        if g == group:
+            continue
+        groups[g] = [c for c in groups[g] if c.lower() != category.lower()]
+
     if not any(c.lower() == category.lower() for c in groups[group]):
         groups[group].append(category)
 
 
-def find_existing(name: str, pool: List[str]) -> str:
-    lo = name.lower()
-    for x in pool:
-        if x.lower() == lo:
-            return x
-    return name
+def cattr_for(t: Tx, has_colors: bool) -> int:
+    # Color by assignment status
+    cat = (t.category or "").strip()
+    grp = (t.group or "").strip()
+    if has_colors:
+        if cat and grp:
+            return curses.color_pair(3) | curses.A_BOLD
+        if cat or grp:
+            return curses.color_pair(2) | curses.A_BOLD
+        return curses.color_pair(1) | curses.A_BOLD
+    else:
+        if cat and grp:
+            return curses.A_BOLD
+        return curses.A_NORMAL
 
 
-def find_existing_key(name: str, keys: List[str]) -> str:
-    lo = name.lower()
-    for x in keys:
-        if x.lower() == lo:
-            return x
-    return name
+# ---------------------------------------------------------------------
+# Main command
+# ---------------------------------------------------------------------
 
-
-
-def best_autocomplete(typed: str, options: List[str]) -> str:
-    """Return the best full option to autocomplete to (case-insensitive), or "" if none.
-
-    Preference:
-      1) startswith matches (shortest completion)
-      2) contains matches
-    """
-    t = typed.strip()
-    if not t:
-        return ""
-    lo = t.lower()
-    starts = [o for o in options if o.lower().startswith(lo)]
-    if starts:
-        # choose shortest (most specific) then alphabetical
-        return sorted(starts, key=lambda s: (len(s), s.lower()))[0]
-    contains = [o for o in options if lo in o.lower()]
-    if contains:
-        return sorted(contains, key=lambda s: (len(s), s.lower()))[0]
-    return ""
-
-def autocomplete_suffix(typed: str, options: List[str]) -> str:
-    best = best_autocomplete(typed, options)
-    if not best:
-        return ""
-    t = typed.rstrip()
-    if not t:
-        return ""
-    # If already equal (case-insensitive), no suffix.
-    if best.lower() == t.lower():
-        return ""
-    if best.lower().startswith(t.lower()):
-        return best[len(t):]
-    return ""
-
-# ----------------------------
-# Domain model
-# ----------------------------
-
-@dataclass
-class Tx:
-    statement_date: str
-    txn_date: str
-    description: str
-    amount: str
-    category: str
-    group: str
-
-    # UI state
-    status: str  # "red" | "yellow" | "green"
-    suggested_category: str = ""
-    suggested_group: str = ""
-
-
-def load_transactions_csv(path: Path) -> Tuple[List[Dict[str, str]], List[Tx]]:
-    rows: List[Dict[str, str]] = []
-    txs: List[Tx] = []
-    with path.open("r", newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for r in reader:
-            rows.append(r)
-            txs.append(
-                Tx(
-                    statement_date=r.get("statement_date", r.get("StatementDate", "")) or "",
-                    txn_date=r.get("date", r.get("TxnDate", "")) or "",
-                    description=r.get("description", r.get("Merchant", r.get("Description", ""))) or "",
-                    amount=r.get("amount", r.get("Amount", "")) or "",
-                    category=r.get("category", r.get("Category", "")) or "",
-                    group=r.get("group", r.get("Group", "")) or "",
-                    status="red",
-                )
-            )
-    return rows, txs
-
-
-def write_transactions_csv(path: Path, rows: List[Dict[str, str]]) -> None:
-    if not rows:
-        path.write_text("", encoding="utf-8")
-        return
-    # Ensure columns exist
-    for r in rows:
-        r.setdefault("category", "")
-        r.setdefault("group", "")
-    fieldnames = list(rows[0].keys())
-    with path.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
-        w.writeheader()
-        for r in rows:
-            w.writerow(r)
-
-
-def apply_auto_suggestions(
-    txs: List[Tx],
-    rules: Dict[str, str],
-    groups: Dict[str, List[str]],
-) -> None:
-    # Build cat->group lookup (first match wins)
-    cat_to_group: Dict[str, str] = {}
-    for g, cats in groups.items():
-        for c in cats:
-            cat_to_group.setdefault(c.lower(), g)
-
-    for t in txs:
-        t.suggested_category = ""
-        t.suggested_group = ""
-
-        if t.category and t.group:
-            t.status = "green"
-            continue
-
-        merch = normalize_merchant(t.description)
-        if merch and merch in rules:
-            cat = rules[merch]
-            grp = cat_to_group.get(cat.lower(), "")
-            t.suggested_category = cat
-            t.suggested_group = grp
-            # show as yellow until confirmed
-            if not t.category:
-                t.category = cat
-            if not t.group and grp:
-                t.group = grp
-            t.status = "yellow"
-        else:
-            t.status = "red"
-
-
-# ----------------------------
-# Curses UI
-# ----------------------------
-
-def cmd_categorize(argv: List[str]) -> int:
-    """
-    Categorize transactions using rules + taxonomy (interactive TUI).
-    """
+def cmd_categorize(cmd_argv: List[str]) -> int:
     ap = argparse.ArgumentParser(prog="monarch-tools categorize")
-    ap.add_argument("--in", dest="in_csv", required=True, help="Input transactions CSV (out/*.monarch.csv)")
-    ap.add_argument("--rules", required=True, help="Path to rules.json")
-    ap.add_argument("--categories", required=True, help="Path to categories.txt")
-    ap.add_argument("--groups", required=True, help="Path to groups.txt")
-    ap.add_argument("--out", dest="out_csv", default="", help="Optional output CSV path (defaults to overwrite --in)")
-    ns = ap.parse_args(argv)
+    ap.add_argument("--in", dest="in_csv", required=True)
+    ap.add_argument("--rules", dest="rules", required=True)
+    ap.add_argument("--categories", dest="categories", required=True)
+    ap.add_argument("--groups", dest="groups", required=True)
+    ap.add_argument("--out", dest="out_csv", default="")
+    ns = ap.parse_args(cmd_argv)
 
     in_csv = Path(ns.in_csv)
+    out_csv = Path(ns.out_csv) if ns.out_csv else in_csv
+
     rules_path = Path(ns.rules)
     cats_path = Path(ns.categories)
     groups_path = Path(ns.groups)
-    out_csv = Path(ns.out_csv) if ns.out_csv else in_csv
 
-    rows, txs = load_transactions_csv(in_csv)
+    fieldnames, txs = load_transactions_csv(in_csv)
     cats = load_categories(cats_path)
     groups = load_groups(groups_path)
     rules = load_rules(rules_path)
 
-    apply_auto_suggestions(txs, rules, groups)
+    ensure_uncategorized(cats, groups)
 
-    # --- UI state ---
-    sel = 0
-    scroll = 0
-    field = "cat"  # "cat" or "grp"
+    # UI state
+    sel = 0          # absolute index into txs
+    scroll = 0       # absolute top index into txs
+    field = "cat"    # "cat" or "grp"
     editing = False
     buf = ""
     cur = 0
-    status = "Arrows move. Type to edit. Enter confirms. TAB switches Cat/Grp. s=save, q=quit."
-
-    def cancel_edit() -> None:
-        nonlocal editing, buf, cur
-        editing = False
-        buf = ""
-        cur = 0
-        esc_armed = False
-
-    def begin_edit() -> None:
-        nonlocal editing, buf, cur
-        editing = True
-        buf = (txs[sel].category if field == "cat" else txs[sel].group) or ""
-        cur = len(buf)
-
-    def clear_focused() -> None:
-        nonlocal status
-        t = txs[sel]
-        if field == "cat":
-            t.category = ""
-        else:
-            t.group = ""
-        t.status = "red"
-        status = "Cleared."
-
-    def confirm_row() -> None:
-        """Confirm current row if valid; update rules+taxonomy; mark green and advance."""
-        nonlocal sel, field, status
-        t = txs[sel]
-        cat = (t.category or "").strip()
-        grp = (t.group or "").strip()
-
-        if not cat:
-            t.status = "red"
-            field = "cat"
-            status = "Category required."
-            return
-
-        # Canonicalize category (case-insensitive), creating if needed
-        cat = find_existing(cat, cats)
-        if cat.lower() not in [c.lower() for c in cats]:
-            cats.append(cat)
-
-        # Group required for confirmation
-        if not grp:
-            t.status = "yellow"
-            field = "grp"
-            status = "Group required."
-            t.category = cat
-            return
-
-        grp = find_existing_key(grp, list(groups.keys()))
-        if grp not in groups:
-            groups[grp] = []
-
-        move_category_to_group(groups, grp, cat)
-
-        # Update rule on confirmation
-        merch = normalize_merchant(t.description)
-        if merch:
-            rules[merch] = cat
-
-        # Persist into backing rows dict
-        rows[sel]["category"] = cat
-        rows[sel]["group"] = grp
-
-        t.category = cat
-        t.group = grp
-        t.status = "green"
-
-        # Advance
-        if sel < len(txs) - 1:
-            sel += 1
-        field = "cat"
-        status = f"Confirmed: {cat} / {grp}"
+    status = ""
 
     def draw(stdscr) -> None:
-        nonlocal scroll, status
+        nonlocal scroll, status, sel, field, editing, buf
+
         stdscr.erase()
         h, w = stdscr.getmaxyx()
+        top_h = max(10, min(18, h // 3))
+        bot_h = h - top_h
+        bot_y = top_h
+        table_w = w - 1
 
-        # Layout: reserve a right-side legend panel if we have enough width
-        legend_w = 34
-        show_legend = w >= 120
-        legend_x = w - legend_w if show_legend else w
-        table_w = legend_x - 1  # keep one column gap
+        # Build sorted category list (CatID order)
+        cats_sorted = sorted(cats, key=lambda x: x.lower())
 
-        # Colors
-        has_colors = curses.has_colors()
-        if has_colors:
-            curses.start_color()
-            curses.use_default_colors()
-            curses.init_pair(1, curses.COLOR_RED, -1)
-            curses.init_pair(2, curses.COLOR_YELLOW, -1)
-            curses.init_pair(3, curses.COLOR_GREEN, -1)
-            curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_BLUE)  # focused cell
+        # TOP
+        stdscr.addstr(0, 0, "Categories / Groups", curses.A_BOLD)
+        x = 0
+        y = 2
+        col_w = max(20, min(36, w // 3))
+        max_y = top_h - 2
 
-        def cattr_for(t: Tx) -> int:
-            if not has_colors:
-                return curses.A_NORMAL
-            if t.status == "green":
-                return curses.color_pair(3) | curses.A_BOLD
-            if t.status == "yellow":
-                return curses.color_pair(2)
-            return curses.color_pair(1)
-
-        # Category IDs (displayed in taxonomy; also usable by typing numbers)
-        # Ordering rule:
-        #   1) Force group "Aaa" containing only "Uncategorized" so it is always CatID 1.
-        #   2) Then list remaining groups in group-name order (case-insensitive).
-        #   3) Within each group, list categories in category-name order (case-insensitive).
-        #   4) Any categories not present in any group appear under "Other:" at the end.
-
-        # Ensure the canonical category exists even if categories.txt is incomplete.
-        cats_local = list(cats)
-        if not any(c.lower() == "uncategorized" for c in cats_local):
-            cats_local = ["Uncategorized"] + cats_local
-
-        # Build ordered group list for display and ID assignment.
-        group_names = [g for g in groups.keys() if g.lower() != "aaa"]
-        group_names_sorted = sorted(group_names, key=lambda x: x.lower())
-
-        ordered_groups: List[Tuple[str, List[str]]] = [("Aaa", ["Uncategorized"])]
-        used: set[str] = {"Uncategorized"}
-
-        for g in group_names_sorted:
-            cs = sorted([c for c in groups.get(g, []) if c.lower() != "uncategorized"], key=lambda x: x.lower())
-            ordered_groups.append((g, cs))
-            used.update(cs)
-
-        other_cats = sorted([c for c in cats if c not in used and c.lower() != "uncategorized"], key=lambda x: x.lower())
-
-        # Category IDs follow the same display ordering.
-        cats_sorted = ["Uncategorized"] + [c for _g, _cs in ordered_groups[1:] for c in _cs] + other_cats
-        # Deduplicate while preserving order (defensive).
-        seen: set[str] = set()
-        cats_sorted = [c for c in cats_sorted if not (c in seen or seen.add(c))]
-        cat_id = {c: i + 1 for i, c in enumerate(cats_sorted)}
-
-        # Taxonomy lines (group -> categories, each with an ID)
-        tax_lines: List[str] = []
-        for g, cs in ordered_groups:
-            if g != "Aaa" and not cs:
-                continue  # avoid orphan group headers
-            tax_lines.append(f"{g}:")
-            for c in cs:
-                cid = cat_id.get(c, 0)
-                prefix = f"{cid:>3d}) " if cid else "    "
-                tax_lines.append(f"  {prefix}{c}")
-            tax_lines.append("")
-
-        if other_cats:
-            tax_lines.append("Other:")
-            for c in other_cats:
-                cid = cat_id.get(c, 0)
-                prefix = f"{cid:>3d}) " if cid else "    "
-                tax_lines.append(f"  {prefix}{c}")
-            tax_lines.append("")
-        while tax_lines and tax_lines[-1] == "":
-            tax_lines.pop()
-
-        # Dynamic split: taxonomy only takes what it needs (capped at half screen)
-        # Fixed split: taxonomy always uses half the screen height
-        top_h = max(3, h // 2)
-        bot_y = top_h + 1  # leave a blank line between taxonomy and transactions
-        bot_h = h - bot_y
-
-        # --- TAXONOMY ---
-        stdscr.addstr(0, 0, "TAXONOMY", curses.A_BOLD)
-        needle = buf.lower().strip() if editing and buf.strip() else ""
-        target = field if editing else ""
-        def _add_highlighted(y: int, x: int, full: str) -> None:
-            # Highlight `needle` inside group/category names while editing.
-            if not needle or not target:
-                stdscr.addstr(y, x, full[: table_w])
-                return
-
-            # Group header lines end with ":" (e.g., "Shopping:")
-            is_group = full.rstrip().endswith(":") and not full.startswith("  ")
-            # Category lines look like "    12) Some Cat"
-            is_cat = ") " in full and full.lstrip().startswith(tuple(str(d) for d in range(10)))
-
-            if target == "grp" and is_group:
-                name = full.rstrip()[:-1]  # strip ':'
-                prefix = ""
-                suffix = ":"
-            elif target == "cat" and is_cat:
-                # Split on first ') '
-                left, name = full.split(") ", 1)
-                prefix = left + ") "
-                suffix = ""
-            else:
-                stdscr.addstr(y, x, full[: table_w])
-                return
-
-            # Find match ranges in name
-            lo = name.lower()
-            ranges = []
-            start = 0
-            while True:
-                j = lo.find(needle, start)
-                if j < 0:
+        # Group listing
+        for g in sorted(groups.keys(), key=lambda x: x.lower()):
+            if y >= max_y:
+                x += col_w
+                y = 2
+            if x >= w - 10:
+                break
+            stdscr.addstr(y, x, f"{g}:", curses.A_BOLD)
+            y += 1
+            for c in sorted(groups[g], key=lambda z: z.lower()):
+                if y >= max_y:
+                    x += col_w
+                    y = 2
+                if x >= w - 10:
                     break
-                ranges.append((j, j + len(needle)))
-                start = j + len(needle)
+                stdscr.addstr(y, x, f"  {c}"[: col_w - 1])
+                y += 1
 
-            # Draw prefix
-            curx = x
-            if prefix:
-                stdscr.addstr(y, curx, prefix[: max(0, table_w - curx)])
-                curx += len(prefix)
-
-            # Draw name with highlighted substrings
-            for idx_ch, ch in enumerate(name):
-                if curx >= table_w:
-                    break
-                in_match = any(a <= idx_ch < b for a, b in ranges)
-                attr = curses.color_pair(3) | curses.A_BOLD if in_match else 0
-                stdscr.addstr(y, curx, ch, attr)
-                curx += 1
-
-            if suffix and curx < table_w:
-                stdscr.addstr(y, curx, suffix[: max(0, table_w - curx)])
-
-        for i, line in enumerate(tax_lines[: top_h - 1], start=1):
-            try:
-                _add_highlighted(i, 0, line)
-            except curses.error:
-                pass
-
-        # --- TRANSACTIONS ---
+        # TRANSACTIONS
         if bot_h <= 3:
             stdscr.addstr(top_h, 0, "Terminal too small. Resize taller.", curses.A_BOLD)
             stdscr.refresh()
             return
 
-        # blank spacer line
         try:
             stdscr.addstr(top_h, 0, (" " * w))
         except curses.error:
@@ -549,72 +317,79 @@ def cmd_categorize(argv: List[str]) -> int:
         header = "Num  StmtDate     TxnDate      Amount      Description                           Category               Group"
         stdscr.addstr(bot_y, 0, header[: table_w], curses.A_BOLD)
 
-        visible = bot_h - 2
+        visible_n = bot_h - 2
+
+        # Keep scroll aligned to selection
         if sel < scroll:
             scroll = sel
-        if sel >= scroll + visible:
-            scroll = sel - visible + 1
+        if sel >= scroll + visible_n:
+            scroll = sel - visible_n + 1
 
         # Column widths (constant)
         cat_w = max(16, min(28, max((len(c) for c in cats_sorted), default=12)))
         grp_w = max(12, min(24, max((len(g) for g in groups.keys()), default=5)))
 
+        # Column starts (aligned with header format)
+        cat_x = 3 + 2 + 10 + 2 + 10 + 2 + 10 + 2 + 35 + 2
+        grp_x = cat_x + cat_w + 2
+
         # Draw rows
-        for i in range(visible):
+        has_colors = curses.has_colors()
+        for i in range(visible_n):
             idx = scroll + i
             y = bot_y + 1 + i
             if idx >= len(txs):
                 break
+
             t = txs[idx]
-            base_attr = cattr_for(t)
+            base_attr = cattr_for(t, has_colors)
             if idx == sel:
                 base_attr |= curses.A_BOLD
 
             num = f"{idx+1:>3d}"
-            stmt = f"{t.statement_date:10.10s}"
-            txd = f"{t.txn_date:10.10s}"
-            amt = f"{t.amount:>10.10s}"
-            desc = (t.description or "")[:35].ljust(35)
+            stmt = f"{(t.statement_date or ''):10.10s}"
+            txd = f"{(t.txn_date or ''):10.10s}"
+            amt = f"{(t.amount or ''):>10.10s}"
+            desc = ((t.description or "")[:35]).ljust(35)
 
             cat_val = (t.category or "")
             grp_val = (t.group or "")
 
-            cat = cat_val[:cat_w].ljust(cat_w)
-            grp = grp_val[:grp_w].ljust(grp_w)
+            cat_cell = cat_val[:cat_w].ljust(cat_w)
+            grp_cell = grp_val[:grp_w].ljust(grp_w)
 
-            # If editing selected field, show live buffer in that cell
             if idx == sel and editing:
                 if field == "cat":
-                    cat = buf[:cat_w].ljust(cat_w)
+                    cat_cell = buf[:cat_w].ljust(cat_w)
                 else:
-                    grp = buf[:grp_w].ljust(grp_w)
+                    grp_cell = buf[:grp_w].ljust(grp_w)
 
-            line = f"{num}  {stmt}  {txd}  {amt}  {desc}  {cat}  {grp}"
+            line = f"{num}  {stmt}  {txd}  {amt}  {desc}  {cat_cell}  {grp_cell}"
             stdscr.addstr(y, 0, line[: table_w], base_attr)
 
-            # Focused cell highlight
+        # Focused cell highlight (FIXED: sel is absolute; convert to screen-relative)
+        has_focus = True
         if has_focus and bot_h >= 3:
-            # selected row is always the first visible row (sel is screen-relative 0..)
-            if 0 <= sel < len(visible):
-                y = 1 + sel
+            sel_row = sel - scroll
+            if 0 <= sel_row < visible_n and 0 <= sel < len(txs):
+                y = bot_y + 1 + sel_row
+
                 focus_base = curses.A_REVERSE | curses.A_BOLD
-                if has_colors:
+                if curses.has_colors():
                     focus_base = curses.color_pair(4) | curses.A_BOLD
 
-                tsel = visible[sel]
-                cat_text = tsel.category
-                grp_text = tsel.group
+                tsel = txs[sel]
+                cat_text = (tsel.category or "")
+                grp_text = (tsel.group or "")
 
-                # Autocomplete preview while editing
                 if editing and field == "cat":
                     suf = autocomplete_suffix(buf, cats)
                     cat_text = buf + suf
                 if editing and field == "grp":
-                    suf = autocomplete_suffix(buf, grps)
+                    suf = autocomplete_suffix(buf, list(groups.keys()))
                     grp_text = buf + suf
 
                 if field == "cat":
-                    # draw typed portion normal focus, suffix dim if present
                     suf = ""
                     typed = cat_text
                     if editing:
@@ -622,71 +397,66 @@ def cmd_categorize(argv: List[str]) -> int:
                         typed = buf
                     typed = typed[:cat_w]
                     suf = suf[: max(0, cat_w - len(typed))]
-                    stdscr.addstr(y, cat_x, typed.ljust(cat_w)[: max(0, min(cat_w, table_w - cat_x))], focus_base)
+                    stdscr.addstr(
+                        y,
+                        cat_x,
+                        typed.ljust(cat_w)[: max(0, min(cat_w, table_w - cat_x))],
+                        focus_base,
+                    )
                     if suf and (cat_x + len(typed)) < table_w:
                         stdscr.addstr(y, cat_x + len(typed), suf, focus_base | curses.A_DIM)
                 else:
                     suf = ""
                     typed = grp_text
                     if editing:
-                        suf = autocomplete_suffix(buf, grps)
+                        suf = autocomplete_suffix(buf, list(groups.keys()))
                         typed = buf
                     typed = typed[:grp_w]
                     suf = suf[: max(0, grp_w - len(typed))]
-                    stdscr.addstr(y, grp_x, typed.ljust(grp_w)[: max(0, min(grp_w, table_w - grp_x))], focus_base)
+                    stdscr.addstr(
+                        y,
+                        grp_x,
+                        typed.ljust(grp_w)[: max(0, min(grp_w, table_w - grp_x))],
+                        focus_base,
+                    )
                     if suf and (grp_x + len(typed)) < table_w:
                         stdscr.addstr(y, grp_x + len(typed), suf, focus_base | curses.A_DIM)
 
-        # Status line (left)
-        stdscr.addstr(h - 1, 0, (" " + status)[: table_w])
-
-        # Key legend (right)
-        if show_legend:
-            lx = legend_x
-            stdscr.vline(0, lx - 1, curses.ACS_VLINE, h)
-            legend = [
-                "KEYS",
-                "",
-                "Arrows   Move rows",
-                "Tab      Next field",
-                "S-Tab    Prev field",
-                "Type     Edit field",
-                "Left/Right Move cursor",
-                "Enter    Confirm",
-                "Del      Clear field",
-                "",
-                "ESC q    Quit (confirm)",
-                "ESC s    Save (confirm)",
-            ]
-            for i, line in enumerate(legend[: h], start=0):
-                stdscr.addstr(i, lx, line[: legend_w - 1])
-
-        # Put cursor inside the focused cell during editing (best-effort)
-        if editing:
-            cat_x = 78
-            grp_x = cat_x + cat_w + 2
-            x0 = cat_x if field == "cat" else grp_x
-            maxw = cat_w if field == "cat" else grp_w
-            try:
-                stdscr.move(bot_y + 1 + (sel - scroll), min(x0 + cur, x0 + maxw - 1))
-            except curses.error:
-                pass
+        # Footer / status
+        help_text = "Arrows=move  Tab=switch field  Enter=confirm  e=edit  ESC=save/quit"
+        left = status or ""
+        right = help_text
+        if len(left) + 3 + len(right) > w:
+            right = right[: max(0, w - len(left) - 3)]
+        line = (left + (" " * 3) + right)[: w - 1]
+        try:
+            stdscr.addstr(h - 1, 0, line)
+        except curses.error:
+            pass
 
         stdscr.refresh()
 
     def run(stdscr) -> int:
-        nonlocal sel, field, editing, buf, cur, status
+        nonlocal sel, field, editing, buf, cur, status, scroll
+
+        if curses.has_colors():
+            curses.start_color()
+            curses.use_default_colors()
+            curses.init_pair(1, curses.COLOR_RED, -1)
+            curses.init_pair(2, curses.COLOR_YELLOW, -1)
+            curses.init_pair(3, curses.COLOR_GREEN, -1)
+            curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_BLUE)
 
         curses.curs_set(1)
         stdscr.keypad(True)
 
-        # Start focused on Cat in first transaction
         sel = 0
         field = "cat"
         editing = False
         buf = ""
         cur = 0
         esc_armed = False
+        scroll = 0
 
         while True:
             draw(stdscr)
@@ -699,168 +469,93 @@ def cmd_categorize(argv: List[str]) -> int:
                 continue
 
             if esc_armed:
-                esc_armed = False
                 if ch in (ord("q"), ord("Q")):
-                    # confirm: Save before quitting?
-                    h, w = stdscr.getmaxyx()
-                    msg = "Save before quitting? (y/n)"
-                    stdscr.addstr(h // 2, max(0, (w - len(msg)) // 2), msg, curses.A_REVERSE)
-                    stdscr.refresh()
-                    c2 = stdscr.getch()
-                    if c2 in (ord("y"), ord("Y")):
-                        write_transactions_csv(out_csv, rows)
-                        save_categories(cats_path, cats)
-                        save_groups(groups_path, groups)
-                        save_rules(rules_path, rules)
-                        return 0
-                    if c2 in (ord("n"), ord("N")):
-                        return 0
-                    status = "Continue."
-                    continue
-
+                    status = "Quit."
+                    return 0
                 if ch in (ord("s"), ord("S")):
-                    h, w = stdscr.getmaxyx()
-                    msg = "Save current? (y/n)"
-                    stdscr.addstr(h // 2, max(0, (w - len(msg)) // 2), msg, curses.A_REVERSE)
-                    stdscr.refresh()
-                    c2 = stdscr.getch()
-                    if c2 in (ord("y"), ord("Y")):
-                        write_transactions_csv(out_csv, rows)
-                        save_categories(cats_path, cats)
-                        save_groups(groups_path, groups)
-                        save_rules(rules_path, rules)
-                        status = f"Saved: {out_csv}"
+                    status = "Saved."
+                    return 0
+                esc_armed = False
+                status = ""
+
+            # Editing mode
+            if editing:
+                if ch in (curses.KEY_ENTER, 10, 13):
+                    # Commit typed buffer
+                    if field == "cat":
+                        txs[sel].category = buf.strip()
                     else:
-                        status = "Not saved."
+                        txs[sel].group = buf.strip()
+                    editing = False
+                    buf = ""
                     continue
 
-            # Delete clears focused cell
-            if ch in (curses.KEY_DC,):
-                cancel_edit()
-                clear_focused()
-                continue
+                if ch in (curses.KEY_BACKSPACE, 127, 8):
+                    buf = buf[:-1]
+                    continue
 
-            # Tab / Shift-Tab switches field without saving pending edits
-            if ch == 9 or ch == curses.KEY_BTAB:
-                cancel_edit()
-                field = "grp" if (field == "cat" and ch == 9) else ("cat" if (field == "grp" and ch == 9) else ("cat" if field == "grp" else "grp"))
-                status = f"Field: {field}"
-                continue
-
-            # Movement cancels edit (per requirement)
-            if ch in (curses.KEY_UP, curses.KEY_DOWN, curses.KEY_PPAGE, curses.KEY_NPAGE):
-                cancel_edit()
-                if ch == curses.KEY_UP:
-                    sel = max(0, sel - 1)
-                elif ch == curses.KEY_DOWN:
-                    sel = min(len(txs) - 1, sel + 1)
-                elif ch == curses.KEY_PPAGE:
-                    sel = max(0, sel - 10)
-                elif ch == curses.KEY_NPAGE:
-                    sel = min(len(txs) - 1, sel + 10)
-                continue
-
-            # Left/Right: in edit mode move cursor, else switch field
-            if ch in (curses.KEY_LEFT, curses.KEY_RIGHT):
-                if editing:
-                    if ch == curses.KEY_LEFT:
-                        cur = max(0, cur - 1)
-                    else:
-                        cur = min(len(buf), cur + 1)
-                else:
-                    field = "grp" if field == "cat" else "cat"
-                continue
-
-            # Enter confirms / commits
-            if ch in (10, 13, curses.KEY_ENTER, 343):
-                if editing:
-                    # Commit buffer into field (but do not confirm unless both valid)
-                    # Autocomplete on Enter: append the current suggestion (if any)
-                    opts = cats if field == "cat" else grps
-                    suf = autocomplete_suffix(buf, opts)
-                    if suf:
-                        buf += suf
-                        cur = len(buf)
-                    val = buf.strip()
-                    cancel_edit()
-                    t = txs[sel]
+                if ch == 9:  # Tab
+                    # Switch field while editing
                     if field == "cat":
-                        if val:
-                            # Allow numeric category-id selection (shown in taxonomy)
-                            if val.isdigit():
-                                n = int(val)
-                                other_cats = sorted({c for c in cats if c.lower() != "uncategorized"}, key=lambda x: x.lower())
-                                cats_sorted = ["Uncategorized"] + other_cats
-                                if 1 <= n <= len(cats_sorted):
-                                    val = cats_sorted[n - 1]
-                                else:
-                                    status = f"Invalid category id: {n}"
-                                    continue
-                            val = find_existing(val, cats)
-                            t.category = val
-                            rows[sel]["category"] = val
-                        # After Cat enter: if group invalid -> yellow and move to group
-                        grp = (t.group or "").strip()
-                        if grp and find_existing_key(grp, list(groups.keys())):
-                            grp = find_existing_key(grp, list(groups.keys()))
-                            t.group = grp
-                            rows[sel]["group"] = grp
-                            confirm_row()
-                        else:
-                            t.status = "yellow"
-                            field = "grp"
-                            status = "Group required."
+                        txs[sel].category = buf.strip()
+                        field = "grp"
+                        buf = txs[sel].group or ""
                     else:
-                        if val:
-                            grp = find_existing_key(val, list(groups.keys()))
-                            if grp not in groups:
-                                groups[grp] = []
-                            t.group = grp
-                            rows[sel]["group"] = grp
-                        # After Grp enter: if cat valid -> confirm else move to cat
-                        cat = (t.category or "").strip()
-                        if cat:
-                            confirm_row()
-                        else:
-                            t.status = "yellow"
-                            field = "cat"
-                            status = "Category required."
-                else:
-                    # If yellow: Enter confirms and advances
-                    t = txs[sel]
-                    if t.status == "yellow":
-                        confirm_row()
-                    else:
-                        # Green/red: Enter just advances to next row
-                        if sel < len(txs) - 1:
-                            sel += 1
+                        txs[sel].group = buf.strip()
                         field = "cat"
+                        buf = txs[sel].category or ""
+                    continue
+
+                if 32 <= ch <= 126:
+                    buf += chr(ch)
+                    continue
+
                 continue
 
-            # Backspace in edit mode
-            if ch in (curses.KEY_BACKSPACE, 127, 8) and editing:
-                if cur > 0:
-                    buf = buf[: cur - 1] + buf[cur:]
-                    cur -= 1
-                continue
+            # Not editing
+            if ch == curses.KEY_UP:
+                sel = max(0, sel - 1)
+            elif ch == curses.KEY_DOWN:
+                sel = min(len(txs) - 1, sel + 1)
+            elif ch == 9:  # Tab
+                field = "grp" if field == "cat" else "cat"
+            elif ch in (ord("e"), ord("E")):
+                editing = True
+                buf = (txs[sel].category if field == "cat" else txs[sel].group) or ""
+            elif ch in (curses.KEY_ENTER, 10, 13):
+                # Confirm row: enforce taxonomy (category belongs to exactly one group)
+                t = txs[sel]
+                cat = (t.category or "").strip()
+                grp = (t.group or "").strip()
+                if cat and grp:
+                    ensure_category_in_group(cat, grp, cats, groups)
+                    status = "Confirmed."
+                    # Move to next row
+                    sel = min(len(txs) - 1, sel + 1)
+                else:
+                    status = "Need both Category and Group."
+            elif ch in (ord("a"), ord("A")):
+                # Accept autocomplete suggestion (quick)
+                if field == "cat":
+                    src = txs[sel].category or ""
+                    suf = autocomplete_suffix(src, cats)
+                    if suf:
+                        txs[sel].category = src + suf
+                else:
+                    src = txs[sel].group or ""
+                    suf = autocomplete_suffix(src, list(groups.keys()))
+                    if suf:
+                        txs[sel].group = src + suf
 
-            # Start editing on printable chars
-            if 32 <= ch <= 126 and ch not in (9, 10, 13):
-                if not editing:
-                    begin_edit()
-                buf = buf[:cur] + chr(ch) + buf[cur:]
-                cur += 1
-                continue
+        # unreachable
+        # return 0
 
-            status = "Unknown key. Use arrows, type, Enter, TAB, Del, ESC+q, ESC+s."
+    curses.wrapper(run)
 
-    try:
-        return curses.wrapper(run)
-    except curses.error as e:
-        print(f"ERROR: {e}")
-        print("Tip: resize terminal larger (e.g. >= 120x20) and try again.")
-        return 2
+    # Save outputs
+    save_rules(rules_path, rules)
+    cats_path.write_text("\n".join(cats).rstrip() + "\n", encoding="utf-8")
+    save_groups(groups_path, groups)
+    save_transactions_csv(out_csv, fieldnames, txs)
 
-
-if __name__ == "__main__":
-    raise SystemExit(cmd_categorize([]))
+    return 0

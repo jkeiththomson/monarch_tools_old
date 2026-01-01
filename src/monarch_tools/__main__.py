@@ -1,57 +1,76 @@
 from __future__ import annotations
 
-import argparse
 import sys
-from typing import Callable, Dict, List, Optional
-
-from .commands.hello import cmd_hello
-from .commands.help import cmd_help
-from .commands.version import cmd_version
-from .commands.extract import cmd_extract
-from .commands.categorize import cmd_categorize
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Tuple
 
 
-CommandFn = Callable[[List[str]], int]
+@dataclass(frozen=True)
+class Command:
+    help: str
+    fn: Callable[[List[str]], int]
 
 
-def registry() -> Dict[str, CommandFn]:
-    return {
-        "hello": cmd_hello,
-        "help": cmd_help,
-        "version": cmd_version,
-        "extract": cmd_extract,
-        "categorize": cmd_categorize,
+def _import_commands() -> Dict[str, Command]:
+    # Import lazily so failures are localized to the command being used.
+    from .commands.hello import cmd_hello
+    from .commands.help import cmd_help
+    from .commands.version import cmd_version
+    from .commands.extract import cmd_extract
+    from .commands.categorize import cmd_categorize
+
+    commands: Dict[str, Command] = {
+        "hello": Command("Sanity check the CLI wiring", cmd_hello),
+        "help": Command("Show this help", cmd_help),
+        "version": Command("Print package version", cmd_version),
+        "extract": Command("Extract statement CSVs from a PDF", cmd_extract),
+        "categorize": Command("Categorize transactions using rules + taxonomy (interactive TUI).", cmd_categorize),
     }
 
+    # clean is optional depending on what patch set is applied
+    try:
+        from .commands.clean import cmd_clean  # type: ignore
+        commands["clean"] = Command("Reset baseline taxonomy + rules in data/*", cmd_clean)
+    except Exception:
+        pass
 
-def main(argv: Optional[List[str]] = None) -> int:
-    argv = list(sys.argv[1:] if argv is None else argv)
+    return commands
 
-    parser = argparse.ArgumentParser(prog="python -m monarch_tools", add_help=False)
-    parser.add_argument("command", nargs="?", help="Command to run")
-    parser.add_argument("args", nargs=argparse.REMAINDER)
-    ns = parser.parse_args(argv)
 
-    cmds = registry()
+def _print_usage(commands: Dict[str, Command]) -> None:
+    print("monarch-tools")
+    print()
+    print("Usage:")
+    print("  python -m monarch_tools <command> [args...]")
+    print()
+    print("Commands:")
+    width = max(len(k) for k in commands.keys()) if commands else 10
+    for name in sorted(commands.keys()):
+        print(f"  {name.ljust(width)} {commands[name].help}")
 
-    if not ns.command:
-        return cmd_help([])
 
-    if ns.command in ("-h", "--help"):
-        return cmd_help([])
-    if ns.command in ("-V", "--version"):
-        return cmd_version([])
+def main(argv: List[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
 
-    fn = cmds.get(ns.command)
-    if not fn:
-        print(f"Unknown command: {ns.command}", file=sys.stderr)
-        return cmd_help([])
+    commands = _import_commands()
 
-    args = list(ns.args)
-    if args[:1] == ["--"]:
-        args = args[1:]
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        # If user typed `help`, delegate to cmd_help so it can show per-command help.
+        if argv and argv[0] == "help":
+            return commands["help"].fn(argv[1:])
+        _print_usage(commands)
+        return 0
 
-    return fn(args)
+    cmd = argv[0]
+    cmd_argv = argv[1:]
+
+    if cmd not in commands:
+        print(f"Unknown command: {cmd}")
+        _print_usage(commands)
+        return 2
+
+    return commands[cmd].fn(cmd_argv)
 
 
 if __name__ == "__main__":
