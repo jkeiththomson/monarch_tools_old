@@ -413,7 +413,7 @@ def _save_taxonomy_files(taxonomy: Taxonomy, categories_path: Path, groups_path:
             cats.append(c)
     categories_path.write_text("\n".join(cats) + ("\n" if cats else ""), encoding="utf-8")
 
-def _taxonomy_lines(taxonomy: Taxonomy, col_width: int = 27, max_cols: int = 5) -> Tuple[List[List[str]], List[Tuple[int,int,int]]]:
+def _taxonomy_lines(taxonomy: Taxonomy, col_width: int = 27, max_cols: int = 5, max_rows: int | None = None) -> Tuple[List[List[str]], List[Tuple[int,int,int]]]:
     """Return columns of taxonomy lines and a mapping for highlighting categories by CatID.
     Returns (columns, cat_line_refs) where cat_line_refs contains tuples (cat_id, col_idx, line_idx).
     """
@@ -461,7 +461,10 @@ def _taxonomy_lines(taxonomy: Taxonomy, col_width: int = 27, max_cols: int = 5) 
         all_lines.extend(col)
     if not all_lines:
         all_lines = [DEFAULT_GROUP, f"  1 {DEFAULT_CATEGORY}"]
-    per = max(1, (len(all_lines) + max_cols - 1) // max_cols)
+    if max_rows is None:
+        per = max(1, (len(all_lines) + max_cols - 1) // max_cols)
+    else:
+        per = max(1, max_rows)
     columns = [all_lines[i:i+per] for i in range(0, len(all_lines), per)]
     columns = columns[:max_cols]
 
@@ -487,9 +490,10 @@ def _draw(stdscr, taxonomy: Taxonomy, txns: List[Txn], state: UIState):
     stdscr.addstr(0, 0, " TAXONOMY ".ljust(w-1)[:w-1])
     stdscr.attroff(curses.color_pair(4))
 
-    tax_cols, cat_refs = _taxonomy_lines(taxonomy)
     col_width = 27
     max_cols = min(5, max(1, w // col_width))
+    max_rows = max(1, top_h - 1)  # fill first column top-to-bottom before moving right
+    tax_cols, cat_refs = _taxonomy_lines(taxonomy, col_width=col_width, max_cols=max_cols, max_rows=max_rows)
     tax_cols = tax_cols[:max_cols]
 
     # Determine highlight set from digit_buffer

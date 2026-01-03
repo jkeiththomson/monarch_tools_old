@@ -1,0 +1,6 @@
+Here are the widths of the columns in our transactions list, and there should be one space between each column. Column 0 is 3 wide. Column 1 is the statement date, and that's 10 wide. Column 2 is also 10 wide. Then we have the description, which is 40 wide, and we have a CatID, which is 5 wide. Then we have category, which is computed on the fly to be the longest string in the list of categories, plus 1. Then we have the group column, and that's got the a similar formula.
+
+The focused column in the transaction list is hard to see. Make the background lighter and the text darket
+
+When you display the list of categories and groups at the top, fill the first column before you move to
+ the second column. Don't spread them all across the screen
