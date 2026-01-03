@@ -1,0 +1,139 @@
+Here's what I'd like to see in the user experience: 
+
+1. First, the user runs the "extract" command on a bank or credit card satement pdf. "extract" creates a csv file of extracted transactions
+
+2. Next, the runs the "categorize" command, which starts a full-screen interactive console mode
+
+3. "categorize" presents a screen with a top half and bottom half of approx. the same height. The height is computed on the fly.
+
+	a. The top half of the screen shows the taxonomy of exisitng categories / groups
+
+	b. the bottom half of the screen shows a vertically scrolling list of transactions
+
+4. The user can move the focus using the cursor up, down, left and right arrows. 
+
+5. The focus is always on a single column and row. It can be in any row but must only be in the Cat or Group column
+
+6. Each transiton in the list is auto-assigned to either an existing group and category, or Uncategorized / Aaa
+
+7. For each transaction:
+
+	a. if the transaction has already been manually assigned by the user to a legitimate category and group, render the cat ID, category and group in green text. This transaction is now confirmed.
+
+	b. if the transaction has been automaticallly assigned to a legitimate category and group, and the user has okayed it, render cat ID, category and group in green text. This transaction is now confirmed.
+
+	c. if the transaction has been automaticallly assigned to a legitimate category and group, and the user has not yet okayed it, render cat ID, category and group in yellow text
+
+ 	d. if the transaction has not been assigned to a proper cat and group, render cat ID, category and group in red text
+
+ 	e. for each transaction, show transaction number,  statement date, transaction date, description, cateogry, group,
+ 	   like this:
+
+		Num   Statement    Transaction   Decription                              Cat ID   Category      Group
+		  1   01/31/2018   01/01/2018    AMAZON MKTPLACE PMTS AMZN.COM/BILL WA     23     Clothing      Shopping
+		  2   01/31/2018   01/11/2018    BLUE SHIELD OF CA 800-431-2809 CA         37     Health	      Insurance
+		  3   01/31/2018   01/22/2018    CHARDONNAY SAILING STRIPE.COM CA          22     Sightseeing   Vacation
+
+
+6. The top half of the screen shows all of the existing groups and categpries, up to 5 columns, in this format:
+
+Group_1_name             Group_4_name
+   1 Category_1_name       15 Category_1_name
+   2 Category_2_name       16 Category_2_name
+   3 Category_3_name       17 Category_3_name
+   4 Category_4_name       18 Category_4_name
+   6 Category_5_name       19 Category_5_name
+                           20 Category_6_name
+Group_2_name               21 Category_7_name
+   7 Category_1_name       22 Category_8_name
+   8 Category_2_name       23 Category_9_name
+                           24 Category_10_name
+Group_3_name               25 Category_11_name
+   9 Category_1_name       
+  10 Category_1_name     Group_5_name
+  11 Category_3_name       26 Category_1_name
+  12 Category_4_name       27 Category_2_name
+  13 Category_5_name       28 Category_3_name
+  14 Category_6_name       29 Category_4_name
+
+  ... AND SO ON.
+
+  a. The number to the left of the cat name is the cat ID.
+
+  b. Cat names must be unique across all groups
+
+  d. A Cat must belong to at least one and at most one group
+
+  e. Each column is 27 characters wide
+
+  f. Group 1 is always "Aaa" and cannot be changed by the user. "Aaa" always has a single cat in it: Uncategorized, whose Cat ID is always 1
+
+  g. Whenever a new category is created, it gets inserted in alphabetical order into its group's category list
+
+  h. Whenever a new group is created, it gets inserted in alphabetical order into the group list
+
+  i. Whenever a group or category is either added or removed, compute new category IDs for all categories
+
+  j. Note that we never store category IDs in our rules.json and activity.csv files, these IDs are strictly helpers for the UI. We store the name of each category or group in the transaction. If those names are ever moddified, the transactiono must be modified accordingly
+
+  k. When laying out the category list on the console, never end a column with a group name. If the last line of a column is a group name, move the group name up to the top of the next column
+
+8. Here is the desired workflow for assigning Categories/Groups:
+
+	a. When the user first enters Categorization mode, the UI should display the current lists of categories and groups in the top half of the screen and the list of transactions in left 80% of the bottom half of the screen. 
+
+	b. On the right side of the bottom half of the screen will be the key of all the keystroke shortcuts:
+		0 - 9       enter cat ID
+		Enter       assign category (shoulld work the same regardless of which Enter nutton isd pressed)
+		a - z       specify cat name (With auto-complete)
+		Del         remove existing category
+		Backspace   undo previous keystroke
+		q           prompt to save, then quit app
+	 
+	c. Categorize mode starts with the cursor on the first transaction, "Category" column
+
+	d. The user will see all the automatically assigned transactions in yellow, all the legitimately assigned transactions in green, and anything that hasn't yet been categorized in red. 
+
+	e. The user can cursor up and down his way up and down the list, and left/right between Category and Group
+
+	f. WHEn the user cursors up or down, the focus remains on the same column but moves to the prev or next transaction
+
+	g. if the user hits a numerical key then all categories with first number = the number he typed are highlighted in the taxonomy list. To highlight a number or letter in a word, draw the text in white and background in dark green
+
+	h. If the user hits a second numerical key, then all categories with first two numbers = the numbers he typed are highlighted in the category list
+	 
+	i. If the user hits a third numerical key (either on the typewriter keyboard or the numerical pad keyboard) then highlight the cateogy that matches that ID (if any)  is highlighted in the category list
+
+	j. If the user types one or more letters, we assume he is typing in the name of an existing cat or group, and offer an auto-coplete vdrsion of that string.  Choose the cat or grp with the most matching letters and draw those letters in the cat or grp field so hey look disabled. If the user hits enter and the current cat (as shown in the transaction, including auto-complete) exists, assign that category to that transaction. It that category is already in  a group, put that group name into that transaction and move down to the Cat in the next transaction. IF that cat is NOT already in a group, blank out the group for that transaction and move the focus to that group
+
+	k. if the user moves off of a row, and the row was not green, move to the next row. If the old row has a valid cat and grp, make it green
+
+	l. If he wants to add a new category, he simply types the name of the new cat and hits enter. 
+	 
+	m. While he is typing the cat name, we should auto-complete with cat names from the taxonomy category list, and highlight matching strings in Taxonomy
+
+	n. If he has just created a new category, then we should move the curosr over to the Group column, where he can enter a new group or pick an existing group. And again, hit Enter to make it stick, and auto-complete as necessary. 
+
+	o. So he's going to work his way down the whole list, changing all the yellow and red text to greens as he accpts or creates category assighments. 
+
+	p. Cat anf Group names are case-insensitive. To make the display look professiosnal, enforce capitalization of the first letter in each word of the category. Leave a standalone "a" as lower case, unliss its the very first letter in the cat/grp.
+
+	q. Backspace “undo previous keystroke” = in edit mode: deletes characters; outside edit mode: deletes digits from the CatID buffer
+
+	r. Del "remove existing category" = removes cat or grp from transaction. If cat or group is not used by another transaction, remove it from catetories.txt or groups.txt. User can recreate it if desired.
+
+	s. Add a short timeout to clear the CatID digit buffer automatically (so it doesn’t “stick”).
+	
+	t.	Show the currently-focused transaction’s full description in a one-line inspector (descriptions are often truncated).
+
+8. When all categories have been assigned, a big fat SAVE button appears
+
+	IF USER ELECTS TO SAVE:  Use rules.json, never rules.txt or rules.csv
+
+	For now, copy literal description into rules.json,  and map it to category user has chosen
+	
+
+
+
+
+2. 

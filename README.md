@@ -16,6 +16,8 @@
 ```
 python -m monarch_tools hello
 ``` 
+Prints "Hello, MoFo!" on the console.
+
 
 ## 2. Run extract
 - Run the script that extracts all of the transactions from the bank statement (pdf)

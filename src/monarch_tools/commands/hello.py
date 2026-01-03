@@ -1,5 +1,5 @@
-from typing import List
+from __future__ import annotations
 
-def cmd_hello(argv: List[str]) -> int:
-    print("hello: monarch-tools is wired up")
+def cmd_hello(argv: list[str] | None = None) -> int:
+    print("Hello, MoFo!")
     return 0
