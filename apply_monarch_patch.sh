@@ -21,6 +21,96 @@ QUERY="${1:-}"
 DOWNLOADS="$HOME/Downloads"
 PROJECT_ROOT="$HOME/dev/mon/monarch-tools"
 
+# ---- Sync guardrails (VERBOSE) ----
+BASE_COMMIT="0079be8"
+BASE_TAG="golden-baseline-2026-01-03"
+
+cd "$PROJECT_ROOT"
+
+CUR_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || true)"
+CUR_DESC="$(git describe --tags --always 2>/dev/null || true)"
+DIRTY="$(git status --porcelain 2>/dev/null || true)"
+
+echo "==> Repo:"
+echo "    $PROJECT_ROOT"
+echo "==> Git state:"
+echo "    $CUR_DESC ($CUR_COMMIT)"
+
+if [[ -z "$CUR_COMMIT" ]]; then
+  echo "ERROR: Not a git repository:"
+  echo "  $PROJECT_ROOT"
+  exit 20
+fi
+
+if [[ -n "$DIRTY" ]]; then
+  echo "ERROR: Working tree is not clean."
+  echo
+  echo "git status --porcelain:"
+  echo "$DIRTY"
+  exit 21
+fi
+
+if [[ "$CUR_COMMIT" != "$BASE_COMMIT" ]]; then
+  echo "ERROR: Refusing to apply patch on the wrong baseline."
+  echo
+  echo "Expected:"
+  echo "  $BASE_TAG ($BASE_COMMIT)"
+  echo "Current:"
+  echo "  $CUR_DESC ($CUR_COMMIT)"
+  echo
+  echo "Fix with:"
+  echo "  cd \"$PROJECT_ROOT\""
+  echo "  git checkout $BASE_TAG"
+  exit 22
+fi
+
+cd "$DOWNLOADS"
+
+# ---- Sync guardrails ----
+BASE_COMMIT="0079be8"
+BASE_TAG="golden-baseline-2026-01-03"
+
+cd "$PROJECT_ROOT"
+
+CUR_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || true)"
+CUR_DESC="$(git describe --tags --always 2>/dev/null || true)"
+DIRTY="$(git status --porcelain 2>/dev/null || true)"
+
+echo "==> Repo:"
+echo "    $PROJECT_ROOT"
+echo "==> Git:"
+echo "    $CUR_DESC ($CUR_COMMIT)"
+
+if [[ -z "$CUR_COMMIT" ]]; then
+  echo "ERROR: Not a git repo (or git not available) at:"
+  echo "  $PROJECT_ROOT"
+  exit 20
+fi
+
+if [[ -n "$DIRTY" ]]; then
+  echo "ERROR: Working tree not clean. Commit or stash first."
+  echo
+  echo "git status --porcelain:"
+  echo "$DIRTY"
+  exit 21
+fi
+
+# Require that BASE_COMMIT is an ancestor of HEAD (so we stay on the same lineage)
+if ! git merge-base --is-ancestor "$BASE_COMMIT" HEAD; then
+  echo "ERROR: Refusing to apply patch. Repo is not descended from the baseline."
+  echo
+  echo "Expected baseline ancestor:"
+  echo "  $BASE_TAG ($BASE_COMMIT)"
+  echo "Current:"
+  echo "  $CUR_DESC ($CUR_COMMIT)"
+  echo
+  echo "Fix with:"
+  echo "  cd \"$PROJECT_ROOT\""
+  echo "  git checkout -b ui-fixes $BASE_TAG"
+  exit 22
+fi
+cd "$DOWNLOADS"
+
 if [[ -z "$QUERY" ]]; then
   echo "Usage: $0 <zip-name-or-fragment>"
   exit 1
